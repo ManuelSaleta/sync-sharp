@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
+
+    <!-- Package Metadata -->
+    <PackageId>Sync.Sharp</PackageId>
+    <Version>1.0.0</Version>
+    <Title>Sync.Sharp</Title>
+    <Authors>Manuel Saleta</Authors>
+    <Company>ChaoticDreams</Company>
+    <Description>Zero-trust media acquisition, VPN killswitch verification, Prowlarr/qBittorrent orchestration, ffprobe verification, and restricted rsync transfer engine for .NET 10.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/ManuelSaleta/sync-sharp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/ManuelSaleta/sync-sharp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>media-sync;prowlarr;qbittorrent;plex;rsync;wireguard;vpn;homelab;dotnet;csharp</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CliWrap" Version="3.8.2" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <PackageReference Include="Plex.Core.Http" Version="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Sync.Sharp.Models.Options" />
+  </ItemGroup>
+
+</Project>

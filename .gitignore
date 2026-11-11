@@ -1,0 +1,30 @@
+## .NET Core
+bin/
+obj/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+*.userprefs
+
+## Visual Studio
+.vs/
+.idea/
+.vscode/
+*.DotSettings.user
+
+## Local Config & State
+appsettings.local.json
+*.lock
+state.json
+
+## Build and Package Artifacts
+*.nupkg
+*.snupkg
+nupkg/
+*.trx
+TestResults/
+
+## OS specific
+.DS_Store
+Thumbs.db
