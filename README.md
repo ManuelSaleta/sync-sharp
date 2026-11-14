@@ -1,5 +1,6 @@
 # Sync.Sharp
 
+[![Tests](https://github.com/ManuelSaleta/sync-sharp/actions/workflows/test.yml/badge.svg)](https://github.com/ManuelSaleta/sync-sharp/actions/workflows/test.yml)
 [![NuGet Version](https://img.shields.io/nuget/v/Sync.Sharp.svg?style=flat-square)](https://www.nuget.org/packages/Sync.Sharp/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![.NET Compatibility](https://img.shields.io/badge/.NET-%3E%3D%2010.0-512BD4.svg?style=flat-square)](https://dotnet.microsoft.com/)
