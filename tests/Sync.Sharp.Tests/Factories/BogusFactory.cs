@@ -57,25 +57,23 @@ public static class BogusFactory
     /// </summary>
     /// <typeparam name="T">The registered POCO type or collection of registered POCOs to create.</typeparam>
     /// <param name="count">The number of instances to generate (defaults to 1).</param>
+    /// <remarks> throws NotSupportedException</remarks>
     /// <returns>
     /// A single instance of <typeparamref name="T"/> when <paramref name="count"/> is 1;
     /// otherwise a <see cref="List{T}"/> of generated instances.
     /// </returns>
     public static dynamic Create<T>(int count = 1)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(count, 1, nameof(count));
+        count = Math.Abs(count); //Ignore negatives.
 
         var targetType = typeof(T);
 
         // Case 1: Direct POCO registration
         if (Registrations.TryGetValue(targetType, out var registration))
         {
-            if (count > 1)
-            {
-                return registration.GenerateMany(count);
-            }
-
-            return registration.GenerateOne();
+            return count > 1 ?
+                 registration.GenerateMany(count) :
+                 registration.GenerateOne();
         }
 
         // Case 2: Array of registered type

@@ -150,14 +150,6 @@ public class BogusFactoryTests
     }
 
     [Fact]
-    public void Create_WithCountZeroOrNegative_ShouldThrowArgumentOutOfRangeException()
-    {
-        var action = () => BogusFactory.Create<PlexMetadataItem>(0);
-
-        action.Should().Throw<ArgumentOutOfRangeException>();
-    }
-
-    [Fact]
     public void Create_UnregisteredType_ShouldThrowNotSupportedException()
     {
         var action = () => BogusFactory.Create<UnregisteredPoco>();
