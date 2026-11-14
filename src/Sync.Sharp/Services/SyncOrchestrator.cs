@@ -75,7 +75,7 @@ public sealed class SyncOrchestrator(
                 continue;
             }
 
-            var filter = string.Equals(candidate.Category, "tv", StringComparison.OrdinalIgnoreCase)
+            var filter = candidate.Category.IsTv()
                 ? _filtersConfig.Tv
                 : _filtersConfig.Movies;
 
@@ -131,7 +131,7 @@ public sealed class SyncOrchestrator(
         foreach (var torrent in completed)
         {
             var isSynced = stateStore.IsHashSynced(torrent.Hash);
-            var category = string.IsNullOrWhiteSpace(torrent.Category) ? "movies" : torrent.Category;
+            var category = torrent.MediaCategory;
 
             if (!isSynced)
             {
@@ -174,7 +174,7 @@ public sealed class SyncOrchestrator(
         public string? Id { get; set; } = null;
         public string? InfoHash { get; set; } = null;
         public string Title { get; set; } = string.Empty;
-        public string Category { get; set; } = string.Empty;
+        public MediaCategory Category { get; set; } = MediaCategory.Movies;
         public string SearchQuery { get; set; } = string.Empty;
     }
 

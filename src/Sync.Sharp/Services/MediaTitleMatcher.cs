@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Plex.Core.Http.Models;
+using Sync.Sharp.Models;
 
 namespace Sync.Sharp.Services;
 
@@ -122,6 +123,12 @@ public static partial class MediaTitleMatcher
 
         return s.Trim();
     }
+
+    /// <summary>
+    /// Evaluates whether a raw candidate or torrent release title matches an existing Plex metadata item.
+    /// </summary>
+    public static bool IsMatch(string rawTitle, MediaCategory category, PlexMetadataItem libraryItem, int? explicitYear = null) =>
+        IsMatch(rawTitle, category.ToNormalizedString(), libraryItem, explicitYear);
 
     /// <summary>
     /// Evaluates whether a raw candidate or torrent release title matches an existing Plex metadata item.

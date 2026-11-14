@@ -97,15 +97,23 @@ public sealed class JsonStateStore(
         {
             return _state.Items.Any(i =>
                 string.Equals(i.InfoHash, infoHash, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(i.Status, "synced", StringComparison.OrdinalIgnoreCase));
+                i.Status == MediaSyncStatus.Synced);
         }
     }
+
+    public Task RecordGrabbedAsync(
+        string? externalId,
+        string? infoHash,
+        string title,
+        string category,
+        CancellationToken ct) =>
+        RecordGrabbedAsync(externalId, infoHash, title, MediaCategoryParser.FromStringOrDefault(category), ct);
 
     public async Task RecordGrabbedAsync(
         string? externalId,
         string? infoHash,
         string title,
-        string category,
+        MediaCategory category,
         CancellationToken ct)
     {
         await _fileLock.WaitAsync(ct);
@@ -131,7 +139,7 @@ public sealed class JsonStateStore(
                     InfoHash: infoHash?.ToLowerInvariant() ?? string.Empty,
                     Title: title,
                     Category: category,
-                    Status: "grabbed",
+                    Status: MediaSyncStatus.Grabbed,
                     CreatedAt: DateTimeOffset.UtcNow,
                     SyncedAt: null));
             }
@@ -144,10 +152,17 @@ public sealed class JsonStateStore(
         }
     }
 
-    public async Task MarkSyncedAsync(
+    public Task MarkSyncedAsync(
         string infoHash,
         string title,
         string category,
+        CancellationToken ct) =>
+        MarkSyncedAsync(infoHash, title, MediaCategoryParser.FromStringOrDefault(category), ct);
+
+    public async Task MarkSyncedAsync(
+        string infoHash,
+        string title,
+        MediaCategory category,
         CancellationToken ct)
     {
         await _fileLock.WaitAsync(ct);
@@ -164,7 +179,7 @@ public sealed class JsonStateStore(
                     var existing = _state.Items[idx];
                     _state.Items[idx] = existing with
                     {
-                        Status = "synced",
+                        Status = MediaSyncStatus.Synced,
                         SyncedAt = now
                     };
                 }
@@ -175,7 +190,7 @@ public sealed class JsonStateStore(
                         InfoHash: infoHash.ToLowerInvariant(),
                         Title: title,
                         Category: category,
-                        Status: "synced",
+                        Status: MediaSyncStatus.Synced,
                         CreatedAt: now,
                         SyncedAt: now));
                 }

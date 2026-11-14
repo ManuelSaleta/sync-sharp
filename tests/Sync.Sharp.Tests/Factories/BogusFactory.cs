@@ -181,10 +181,10 @@ public static class BogusFactory
                     Progress: f.Random.Double(0.0, 1.0),
                     Size: f.Random.Long(1_000_000_000, 8_000_000_000),
                     Ratio: f.Random.Double(0.0, 3.5),
-                    Seeding_Time: f.Random.Long(0, 86400),
+                    SeedingTime: f.Random.Long(0, 86400),
                     Category: category,
-                    Content_Path: $"/downloads/{category}/{name}",
-                    Save_Path: $"/downloads/{category}"
+                    ContentPath: $"/downloads/{category}/{name}",
+                    SavePath: $"/downloads/{category}"
                 );
             });
 
@@ -196,7 +196,7 @@ public static class BogusFactory
                 Size: f.Random.Long(500_000_000, 4_000_000_000),
                 Progress: f.Random.Double(0.0, 1.0),
                 Priority: 1,
-                Is_Seed: false
+                IsSeed: false
             ));
 
     private static Faker<MediaHistoryEntry> CreateMediaHistoryEntryFaker() =>
@@ -205,8 +205,8 @@ public static class BogusFactory
                 ExternalId: $"imdb:tt{f.Random.Number(1000000, 9999999)}",
                 InfoHash: f.Random.Hexadecimal(40, "").ToLowerInvariant(),
                 Title: f.Lorem.Sentence(3).TrimEnd('.'),
-                Category: f.PickRandom("movies", "tv"),
-                Status: f.PickRandom("grabbed", "synced"),
+                Category: f.PickRandom<MediaCategory>(),
+                Status: f.PickRandom<MediaSyncStatus>(),
                 CreatedAt: f.Date.RecentOffset(14),
                 SyncedAt: f.Random.Bool() ? f.Date.RecentOffset(7) : null
             ));
@@ -223,10 +223,10 @@ public static class BogusFactory
         new Faker<DiscoveryCandidate>()
             .CustomInstantiator(f =>
             {
-                var category = f.PickRandom("movies", "tv");
+                var category = f.PickRandom<MediaCategory>();
                 var query = f.Lorem.Word();
                 return new DiscoveryCandidate(
-                    ExternalId: $"custom:{category}:{query.ToLowerInvariant()}",
+                    ExternalId: $"custom:{category.ToNormalizedString()}:{query.ToLowerInvariant()}",
                     SearchQuery: query,
                     Category: category
                 );
@@ -237,8 +237,8 @@ public static class BogusFactory
             .CustomInstantiator(f => new TrendingMovieItem(
                 Title: f.Lorem.Sentence(2).TrimEnd('.'),
                 Name: null,
-                Imdb_Id: $"tt{f.Random.Number(1000000, 9999999)}",
-                Poster_Url: f.Internet.Url()
+                ImdbId: $"tt{f.Random.Number(1000000, 9999999)}",
+                PosterUrl: f.Internet.Url()
             ));
 
     private static Faker<TrendingTvItem> CreateTrendingTvItemFaker() =>
@@ -247,8 +247,8 @@ public static class BogusFactory
                 Title: f.Lorem.Sentence(2).TrimEnd('.'),
                 Name: null,
                 ShowName: null,
-                Imdb_Id: $"tt{f.Random.Number(1000000, 9999999)}",
-                Poster_Url: f.Internet.Url()
+                ImdbId: $"tt{f.Random.Number(1000000, 9999999)}",
+                PosterUrl: f.Internet.Url()
             ));
 
     private static Faker<CategoryFilterConfigOpts> CreateCategoryFilterConfigOptsFaker() =>

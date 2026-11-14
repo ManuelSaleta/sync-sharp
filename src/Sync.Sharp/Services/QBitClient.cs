@@ -87,11 +87,17 @@ public sealed class QBitClient(
         ".srt"
     ];
 
+    public Task<bool> AddTorrentAsync(string downloadUri, MediaCategory category, CancellationToken ct) =>
+        AddTorrentAsync(downloadUri, category.ToNormalizedString(), ct);
+
     public async Task<bool> AddTorrentAsync(string downloadUri, string category, CancellationToken ct)
     {
         // Enforce Quarantine Pattern: Always add torrents in paused state
         return await AddTorrentQuarantinedAsync(downloadUri, category, ct);
     }
+
+    public Task<bool> AddTorrentQuarantinedAsync(string downloadUri, MediaCategory category, CancellationToken ct) =>
+        AddTorrentQuarantinedAsync(downloadUri, category.ToNormalizedString(), ct);
 
     public async Task<bool> AddTorrentQuarantinedAsync(string downloadUri, string category, CancellationToken ct)
     {
@@ -293,7 +299,7 @@ public sealed class QBitClient(
             foreach (var torrent in pausedTorrents)
             {
                 // If torrent is not 100% complete, it is an in-flight quarantined download
-                if (torrent.Progress < 1.0)
+                if (!torrent.IsCompleted)
                 {
                     await AuditAndQuarantineTorrentAsync(torrent.Hash, ct);
                 }

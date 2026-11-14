@@ -118,7 +118,7 @@ public sealed class MediaTransferService(
             return false;
         }
 
-        var isTv = string.Equals(torrent.Category, "tv", StringComparison.OrdinalIgnoreCase);
+        var isTv = torrent.MediaCategory.IsTv();
         var remoteBaseDir = isTv ? _rsyncConfig.DestTvDir : _rsyncConfig.DestMoviesDir;
 
         // When connecting to micro-nas with a restricted rrsync key (e.g. command="rrsync -wo /mnt/export/storage/plex/media"),

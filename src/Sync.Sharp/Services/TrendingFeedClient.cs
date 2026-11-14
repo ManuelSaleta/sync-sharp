@@ -7,7 +7,13 @@ using Sync.Sharp.Models.Options;
 
 namespace Sync.Sharp.Services;
 
-public sealed record DiscoveryCandidate(string ExternalId, string SearchQuery, string Category);
+public sealed record DiscoveryCandidate(string ExternalId, string SearchQuery, MediaCategory Category)
+{
+    public DiscoveryCandidate(string externalId, string searchQuery, string category)
+        : this(externalId, searchQuery, MediaCategoryParser.FromStringOrDefault(category))
+    {
+    }
+}
 
 public sealed class TrendingFeedClient(
     HttpClient httpClient,
@@ -34,22 +40,22 @@ public sealed class TrendingFeedClient(
                 }
 
                 var trimmed = rawQuery.Trim();
-                var category = "movies";
+                var category = MediaCategory.Movies;
                 var query = trimmed;
 
                 if (trimmed.StartsWith("tv:", StringComparison.OrdinalIgnoreCase))
                 {
-                    category = "tv";
+                    category = MediaCategory.Tv;
                     query = trimmed[3..].Trim();
                 }
                 else if (trimmed.StartsWith("movie:", StringComparison.OrdinalIgnoreCase))
                 {
-                    category = "movies";
+                    category = MediaCategory.Movies;
                     query = trimmed[6..].Trim();
                 }
                 else if (trimmed.StartsWith("movies:", StringComparison.OrdinalIgnoreCase))
                 {
-                    category = "movies";
+                    category = MediaCategory.Movies;
                     query = trimmed[7..].Trim();
                 }
 
@@ -58,7 +64,7 @@ public sealed class TrendingFeedClient(
                     continue;
                 }
 
-                var externalId = $"custom:{category}:{query.ToLowerInvariant()}";
+                var externalId = $"custom:{category.ToNormalizedString()}:{query.ToLowerInvariant()}";
                 var legacyExternalId = $"custom:{query.ToLowerInvariant()}";
                 if (!stateStore.IsExternalIdProcessed(externalId) && !stateStore.IsExternalIdProcessed(legacyExternalId))
                 {
@@ -81,7 +87,7 @@ public sealed class TrendingFeedClient(
                 var externalId = $"custom:tv:{query.ToLowerInvariant()}";
                 if (!stateStore.IsExternalIdProcessed(externalId))
                 {
-                    results.Add(new DiscoveryCandidate(externalId, query, "tv"));
+                    results.Add(new DiscoveryCandidate(externalId, query, MediaCategory.Tv));
                 }
             }
         }
@@ -128,7 +134,7 @@ public sealed class TrendingFeedClient(
 
                         if (!stateStore.IsExternalIdProcessed(externalId))
                         {
-                            results.Add(new DiscoveryCandidate(externalId, title.Trim(), "movies"));
+                            results.Add(new DiscoveryCandidate(externalId, title.Trim(), MediaCategory.Movies));
                         }
                     }
                 }
@@ -181,7 +187,7 @@ public sealed class TrendingFeedClient(
 
                         if (!stateStore.IsExternalIdProcessed(externalId))
                         {
-                            results.Add(new DiscoveryCandidate(externalId, title.Trim(), "tv"));
+                            results.Add(new DiscoveryCandidate(externalId, title.Trim(), MediaCategory.Tv));
                         }
                     }
                 }

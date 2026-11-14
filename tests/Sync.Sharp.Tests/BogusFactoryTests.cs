@@ -36,6 +36,45 @@ public class BogusFactoryTests
     }
 
     [Fact]
+    public void Create_TrendingItems_ShouldReturnPopulatedInstances()
+    {
+        TrendingMovieItem movie = BogusFactory.Create<TrendingMovieItem>();
+        movie.Should().NotBeNull();
+        movie.EffectiveTitle.Should().NotBeNullOrWhiteSpace();
+        movie.ImdbId.Should().StartWith("tt");
+        movie.PosterUrl.Should().StartWith("http");
+        movie.Category.Should().Be(MediaCategory.Movies);
+
+        TrendingTvItem tv = BogusFactory.Create<TrendingTvItem>();
+        tv.Should().NotBeNull();
+        tv.EffectiveTitle.Should().NotBeNullOrWhiteSpace();
+        tv.ImdbId.Should().StartWith("tt");
+        tv.PosterUrl.Should().StartWith("http");
+        tv.Category.Should().Be(MediaCategory.Tv);
+    }
+
+    [Fact]
+    public void Create_MediaHistoryEntry_ShouldReturnPopulatedInstance()
+    {
+        MediaHistoryEntry entry = BogusFactory.Create<MediaHistoryEntry>();
+        entry.Should().NotBeNull();
+        entry.InfoHash.Should().HaveLength(40);
+        entry.Title.Should().NotBeNullOrWhiteSpace();
+        Enum.IsDefined(typeof(MediaCategory), entry.Category).Should().BeTrue();
+        Enum.IsDefined(typeof(MediaSyncStatus), entry.Status).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Create_DiscoveryCandidate_ShouldReturnPopulatedInstance()
+    {
+        DiscoveryCandidate candidate = BogusFactory.Create<DiscoveryCandidate>();
+        candidate.Should().NotBeNull();
+        candidate.ExternalId.Should().NotBeNullOrWhiteSpace();
+        candidate.SearchQuery.Should().NotBeNullOrWhiteSpace();
+        Enum.IsDefined(typeof(MediaCategory), candidate.Category).Should().BeTrue();
+    }
+
+    [Fact]
     public void Create_ProwlarrRelease_ShouldReturnValidRelease()
     {
         ProwlarrRelease release = BogusFactory.Create<ProwlarrRelease>();
