@@ -26,7 +26,7 @@ public class BogusFactoryTests
     [Fact]
     public void Create_PlexMetadataItem_ShouldReturnPopulatedInstance()
     {
-        var item = BogusFactory.Create<PlexMetadataItem>();
+        PlexMetadataItem item = BogusFactory.Create<PlexMetadataItem>();
 
         item.Should().NotBeNull();
         item.Title.Should().NotBeNullOrWhiteSpace();
@@ -38,7 +38,7 @@ public class BogusFactoryTests
     [Fact]
     public void Create_ProwlarrRelease_ShouldReturnValidRelease()
     {
-        var release = BogusFactory.Create<ProwlarrRelease>();
+        ProwlarrRelease release = BogusFactory.Create<ProwlarrRelease>();
 
         release.Should().NotBeNull();
         release.Title.Should().NotBeNullOrWhiteSpace();
@@ -52,7 +52,7 @@ public class BogusFactoryTests
     [Fact]
     public void Create_QBitTorrentItem_ShouldReturnValidTorrent()
     {
-        var torrent = BogusFactory.Create<QBitTorrentItem>();
+        QBitTorrentItem torrent = BogusFactory.Create<QBitTorrentItem>();
 
         torrent.Should().NotBeNull();
         torrent.Hash.Should().HaveLength(40);
@@ -64,7 +64,7 @@ public class BogusFactoryTests
     [Fact]
     public void Create_SyncStateDocument_ShouldReturnDocumentWithPopulatedItems()
     {
-        var doc = BogusFactory.Create<SyncStateDocument>();
+        SyncStateDocument doc = BogusFactory.Create<SyncStateDocument>();
 
         doc.Should().NotBeNull();
         doc.Items.Should().NotBeNull();
@@ -76,10 +76,10 @@ public class BogusFactoryTests
     [Fact]
     public void Create_OptionsClasses_ShouldReturnValidConfigurations()
     {
-        var downloader = BogusFactory.Create<DownloaderConfigOpts>();
-        var indexer = BogusFactory.Create<IndexerConfigOpts>();
-        var rsync = BogusFactory.Create<RsyncConfigOpts>();
-        var vpn = BogusFactory.Create<VpnConfigOpts>();
+        DownloaderConfigOpts downloader = BogusFactory.Create<DownloaderConfigOpts>();
+        IndexerConfigOpts indexer = BogusFactory.Create<IndexerConfigOpts>();
+        RsyncConfigOpts rsync = BogusFactory.Create<RsyncConfigOpts>();
+        VpnConfigOpts vpn = BogusFactory.Create<VpnConfigOpts>();
 
         downloader.BaseUrl.Should().NotBeNullOrWhiteSpace();
         indexer.ApiKey.Should().NotBeNullOrWhiteSpace();
@@ -91,7 +91,7 @@ public class BogusFactoryTests
     public void Create_List_ShouldReturnSpecifiedCountOfItems()
     {
         var count = 5;
-        var items = BogusFactory.Create<List<PlexMetadataItem>>(count);
+        List<PlexMetadataItem> items = BogusFactory.Create<List<PlexMetadataItem>>(count);
 
         items.Should().NotBeNull();
         items.Should().HaveCount(count);
@@ -102,7 +102,7 @@ public class BogusFactoryTests
     public void Create_IReadOnlyList_ShouldReturnSpecifiedCount()
     {
         var count = 3;
-        var releases = BogusFactory.Create<IReadOnlyList<ProwlarrRelease>>(count);
+        IReadOnlyList<ProwlarrRelease> releases = BogusFactory.Create<IReadOnlyList<ProwlarrRelease>>(count);
 
         releases.Should().NotBeNull();
         releases.Should().HaveCount(count);
@@ -112,7 +112,7 @@ public class BogusFactoryTests
     public void Create_Array_ShouldReturnPopulatedArray()
     {
         var count = 4;
-        var files = BogusFactory.Create<QBitTorrentFileItem[]>(count);
+        QBitTorrentFileItem[] files = BogusFactory.Create<QBitTorrentFileItem[]>(count);
 
         files.Should().NotBeNull();
         files.Should().HaveCount(count);
@@ -120,12 +120,33 @@ public class BogusFactoryTests
     }
 
     [Fact]
-    public void Create_WithCountGreaterThanOneOnNonCollection_ShouldThrowArgumentException()
+    public void Create_WithCountGreaterThanOne_ShouldInferAndReturnList()
     {
-        var action = () => BogusFactory.Create<PlexMetadataItem>(5);
+        // When requesting a POCO with count > 1, a List<T> should be inferred and returned
+        List<QBitTorrentFileItem> files = BogusFactory.Create<QBitTorrentFileItem>(5);
 
-        action.Should().Throw<ArgumentException>()
-            .WithMessage("*not a collection*");
+        files.Should().NotBeNull();
+        files.Should().HaveCount(5);
+        files.All(f => f.Size > 0).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Create_WithCountGreaterThanOne_UsingVar_ShouldYieldListInstance()
+    {
+        var files = BogusFactory.Create<QBitTorrentFileItem>(5);
+
+        ((object)files).Should().BeOfType<List<QBitTorrentFileItem>>();
+        ((List<QBitTorrentFileItem>)files).Should().HaveCount(5);
+    }
+
+    [Fact]
+    public void Create_WithDefaultCountOne_ShouldReturnSingleInstanceNotList()
+    {
+        PlexMetadataItem movie = BogusFactory.Create<PlexMetadataItem>();
+
+        movie.Should().NotBeNull();
+        movie.Should().BeOfType<PlexMetadataItem>();
+        movie.Title.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]

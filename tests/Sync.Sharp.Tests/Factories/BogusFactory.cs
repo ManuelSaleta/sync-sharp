@@ -51,14 +51,17 @@ public static class BogusFactory
     };
 
     /// <summary>
-    /// Generates a single instance of <typeparamref name="T"/>, or a collection of instances when
-    /// <typeparamref name="T"/> is a supported collection type (<see cref="List{T}"/>, <see cref="IReadOnlyList{T}"/>,
-    /// <see cref="IList{T}"/>, <see cref="IEnumerable{T}"/>, or array).
+    /// Generates a single instance of <typeparamref name="T"/> when <paramref name="count"/> is 1,
+    /// or a <see cref="List{T}"/> containing <paramref name="count"/> instances when <paramref name="count"/> is greater than 1.
+    /// Collections can also be requested explicitly (e.g. <c>Create&lt;List&lt;T&gt;&gt;(count)</c> or <c>Create&lt;T[]&gt;(count)</c>).
     /// </summary>
     /// <typeparam name="T">The registered POCO type or collection of registered POCOs to create.</typeparam>
-    /// <param name="count">The number of instances to generate (defaults to 1; must be 1 for single object types).</param>
-    /// <returns>A populated fake instance or collection of <typeparamref name="T"/>.</returns>
-    public static T Create<T>(int count = 1)
+    /// <param name="count">The number of instances to generate (defaults to 1).</param>
+    /// <returns>
+    /// A single instance of <typeparamref name="T"/> when <paramref name="count"/> is 1;
+    /// otherwise a <see cref="List{T}"/> of generated instances.
+    /// </returns>
+    public static dynamic Create<T>(int count = 1)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(count, 1, nameof(count));
 
@@ -69,12 +72,10 @@ public static class BogusFactory
         {
             if (count > 1)
             {
-                throw new ArgumentException(
-                    $"Type '{targetType.Name}' is not a collection. To generate {count} instances, call BogusFactory.Create<List<{targetType.Name}>>({count}).",
-                    nameof(count));
+                return registration.GenerateMany(count);
             }
 
-            return (T)registration.GenerateOne();
+            return registration.GenerateOne();
         }
 
         // Case 2: Array of registered type
@@ -83,7 +84,7 @@ public static class BogusFactory
             var elementType = targetType.GetElementType()!;
             if (Registrations.TryGetValue(elementType, out var arrayRegistration))
             {
-                return (T)(object)arrayRegistration.GenerateArray(count);
+                return arrayRegistration.GenerateArray(count);
             }
         }
 
@@ -93,11 +94,7 @@ public static class BogusFactory
             var genericArgs = targetType.GetGenericArguments();
             if (genericArgs.Length == 1 && Registrations.TryGetValue(genericArgs[0], out var collectionRegistration))
             {
-                var list = collectionRegistration.GenerateMany(count);
-                if (targetType.IsAssignableFrom(list.GetType()))
-                {
-                    return (T)list;
-                }
+                return collectionRegistration.GenerateMany(count);
             }
         }
 
