@@ -27,14 +27,6 @@ public sealed record TrendingMovieItem(
 
     [JsonIgnore]
     public MediaCategory Category => MediaCategory.Movies;
-
-    [JsonIgnore]
-    [Obsolete("Use ImdbId instead.")]
-    public string? Imdb_Id => ImdbId;
-
-    [JsonIgnore]
-    [Obsolete("Use PosterUrl instead.")]
-    public string? Poster_Url => PosterUrl;
 }
 
 public sealed record TrendingTvItem(
@@ -52,12 +44,4 @@ public sealed record TrendingTvItem(
 
     [JsonIgnore]
     public MediaCategory Category => MediaCategory.Tv;
-
-    [JsonIgnore]
-    [Obsolete("Use ImdbId instead.")]
-    public string? Imdb_Id => ImdbId;
-
-    [JsonIgnore]
-    [Obsolete("Use PosterUrl instead.")]
-    public string? Poster_Url => PosterUrl;
 }

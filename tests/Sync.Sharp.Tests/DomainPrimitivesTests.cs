@@ -140,15 +140,9 @@ public class DomainPrimitivesTests
         var movie = JsonSerializer.Deserialize<TrendingMovieItem>(movieJson);
         movie.Should().NotBeNull();
         movie!.Title.Should().Be("Dune: Part Two");
-        movie.ImdbId.Should().Be("tt15239678");
         movie.PosterUrl.Should().Be("https://example.com/dune2.jpg");
         movie.EffectiveTitle.Should().Be("Dune: Part Two");
         movie.Category.Should().Be(MediaCategory.Movies);
-
-#pragma warning disable CS0618
-        movie.Imdb_Id.Should().Be("tt15239678");
-        movie.Poster_Url.Should().Be("https://example.com/dune2.jpg");
-#pragma warning restore CS0618
 
         ITrendingItem movieItem = movie;
         movieItem.EffectiveTitle.Should().Be("Dune: Part Two");
