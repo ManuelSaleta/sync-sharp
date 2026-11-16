@@ -51,29 +51,30 @@ public static class BogusFactory
     };
 
     /// <summary>
-    /// Generates a single instance of <typeparamref name="T"/> when <paramref name="count"/> is 1,
-    /// or a <see cref="List{T}"/> containing <paramref name="count"/> instances when <paramref name="count"/> is greater than 1.
-    /// Collections can also be requested explicitly (e.g. <c>Create&lt;List&lt;T&gt;&gt;(count)</c> or <c>Create&lt;T[]&gt;(count)</c>).
+    /// Generates a single instance of <typeparamref name="T"/>, or a collection of instances when
+    /// <typeparamref name="T"/> is a supported collection type (<see cref="List{T}"/>, <see cref="IReadOnlyList{T}"/>,
+    /// or array).
     /// </summary>
     /// <typeparam name="T">The registered POCO type or collection of registered POCOs to create.</typeparam>
-    /// <param name="count">The number of instances to generate (defaults to 1).</param>
-    /// <remarks> throws NotSupportedException</remarks>
-    /// <returns>
-    /// A single instance of <typeparamref name="T"/> when <paramref name="count"/> is 1;
-    /// otherwise a <see cref="List{T}"/> of generated instances.
-    /// </returns>
-    public static dynamic Create<T>(int count = 1)
+    /// <param name="count">The number of instances to generate (defaults to 1; must be 1 for single POCO types).</param>
+    /// <returns>A populated fake instance or collection of <typeparamref name="T"/>.</returns>
+    public static T Create<T>(int count = 1)
     {
-        count = Math.Abs(count); //Ignore negatives.
+        count = Math.Abs(count); // Ignore negatives.
 
         var targetType = typeof(T);
 
         // Case 1: Direct POCO registration
         if (Registrations.TryGetValue(targetType, out var registration))
         {
-            return count > 1 ?
-                 registration.GenerateMany(count) :
-                 registration.GenerateOne();
+            if (count > 1)
+            {
+                throw new ArgumentException(
+                    $"Type '{targetType.Name}' is not a collection. To generate {count} instances, call BogusFactory.Create<List<{targetType.Name}>>({count}).",
+                    nameof(count));
+            }
+
+            return (T)registration.GenerateOne();
         }
 
         // Case 2: Array of registered type
@@ -82,7 +83,7 @@ public static class BogusFactory
             var elementType = targetType.GetElementType()!;
             if (Registrations.TryGetValue(elementType, out var arrayRegistration))
             {
-                return arrayRegistration.GenerateArray(count);
+                return (T)(object)arrayRegistration.GenerateArray(count);
             }
         }
 
@@ -92,7 +93,11 @@ public static class BogusFactory
             var genericArgs = targetType.GetGenericArguments();
             if (genericArgs.Length == 1 && Registrations.TryGetValue(genericArgs[0], out var collectionRegistration))
             {
-                return collectionRegistration.GenerateMany(count);
+                var list = collectionRegistration.GenerateMany(count);
+                if (targetType.IsAssignableFrom(list.GetType()))
+                {
+                    return (T)list;
+                }
             }
         }
 
@@ -236,7 +241,7 @@ public static class BogusFactory
         new Faker<TrendingMovieItem>()
             .CustomInstantiator(f => new TrendingMovieItem(
                 Title: f.Lorem.Sentence(2).TrimEnd('.'),
-                Name: null,
+                Name: f.Name.FullName(),
                 ImdbId: $"tt{f.Random.Number(1000000, 9999999)}",
                 PosterUrl: f.Internet.Url()
             ));

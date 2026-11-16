@@ -47,7 +47,7 @@ public class ProwlarrAndQBitClientTests
             ApiKey = "valid-key",
             MinSeeders = 50
         });
-        var jsonOpts = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var jsonOpts = new JsonSerializerOptions(JsonSerializerDefaults.Web) { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
         var client = new ProwlarrClient(httpClient, indexerOpts, jsonOpts, NullLogger<ProwlarrClient>.Instance);
 
         var filter = new CategoryFilterConfigOpts
@@ -102,7 +102,7 @@ public class ProwlarrAndQBitClientTests
             Password = "secret",
             StagingDir = "/downloads"
         });
-        var jsonOpts = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var jsonOpts = new JsonSerializerOptions(JsonSerializerDefaults.Web) { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
         var client = new QBitClient(httpClient, downloaderOpts, jsonOpts, NullLogger<QBitClient>.Instance);
 
         var passed = await client.AuditAndQuarantineTorrentAsync("badhash123", CancellationToken.None);

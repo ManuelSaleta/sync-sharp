@@ -159,23 +159,23 @@ public class BogusFactoryTests
     }
 
     [Fact]
-    public void Create_WithCountGreaterThanOne_ShouldInferAndReturnList()
+    public void Create_WithCountGreaterThanOneOnNonCollection_ShouldThrowArgumentException()
     {
-        // When requesting a POCO with count > 1, a List<T> should be inferred and returned
-        List<QBitTorrentFileItem> files = BogusFactory.Create<QBitTorrentFileItem>(5);
+        var action = () => BogusFactory.Create<QBitTorrentFileItem>(5);
 
-        files.Should().NotBeNull();
-        files.Should().HaveCount(5);
-        files.All(f => f.Size > 0).Should().BeTrue();
+        action.Should().Throw<ArgumentException>()
+            .WithMessage("*not a collection*");
     }
 
     [Fact]
-    public void Create_WithCountGreaterThanOne_UsingVar_ShouldYieldListInstance()
+    public void Create_WithGenericCollectionType_UsingVar_ShouldYieldStronglyTypedList()
     {
-        var files = BogusFactory.Create<QBitTorrentFileItem>(5);
+        var files = BogusFactory.Create<List<QBitTorrentFileItem>>(5);
 
-        ((object)files).Should().BeOfType<List<QBitTorrentFileItem>>();
-        ((List<QBitTorrentFileItem>)files).Should().HaveCount(5);
+        files.Should().NotBeNull();
+        files.Should().BeOfType<List<QBitTorrentFileItem>>();
+        files.Should().HaveCount(5);
+        files.All(f => f.Size > 0).Should().BeTrue();
     }
 
     [Fact]

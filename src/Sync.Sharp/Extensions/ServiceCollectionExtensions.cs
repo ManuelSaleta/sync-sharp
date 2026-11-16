@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Plex.Core.Http;
@@ -113,14 +114,19 @@ public static class ServiceCollectionExtensions
             PlexClient.DefaultJsonOptions.Converters.Add(flexibleStringConverter);
         }
 
-        var jsonSerializerOptions = new JsonSerializerOptions
+        var jsonSerializerOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
             PropertyNameCaseInsensitive = true,
             ReadCommentHandling = JsonCommentHandling.Skip,
             AllowTrailingCommas = true,
             WriteIndented = true,
-            Converters = { flexibleStringConverter }
+            Converters =
+            {
+                flexibleStringConverter,
+                new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower)
+            }
         };
         services.AddSingleton(jsonSerializerOptions);
 

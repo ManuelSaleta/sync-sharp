@@ -16,8 +16,8 @@ public interface ITrendingItem
 }
 
 public sealed record TrendingMovieItem(
-    [property: JsonPropertyName("title")] string? Title = null,
-    [property: JsonPropertyName("name")] string? Name = null,
+    string? Title = null,
+    string? Name = null,
     [property: JsonPropertyName("imdb_id")] string? ImdbId = null,
     [property: JsonPropertyName("poster_url")] string? PosterUrl = null
 ) : ITrendingItem
@@ -30,8 +30,8 @@ public sealed record TrendingMovieItem(
 }
 
 public sealed record TrendingTvItem(
-    [property: JsonPropertyName("title")] string? Title = null,
-    [property: JsonPropertyName("name")] string? Name = null,
+    string? Title = null,
+    string? Name = null,
     [property: JsonPropertyName("show_name")] string? ShowName = null,
     [property: JsonPropertyName("imdb_id")] string? ImdbId = null,
     [property: JsonPropertyName("poster_url")] string? PosterUrl = null

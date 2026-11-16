@@ -5,6 +5,7 @@ namespace Sync.Sharp.Tests;
 
 public class DomainPrimitivesTests
 {
+    private static readonly JsonSerializerOptions WebJsonOptions = new(JsonSerializerDefaults.Web);
     [Theory]
     [InlineData("tv", MediaCategory.Tv)]
     [InlineData("TV", MediaCategory.Tv)]
@@ -137,7 +138,7 @@ public class DomainPrimitivesTests
             }
             """;
 
-        var movie = JsonSerializer.Deserialize<TrendingMovieItem>(movieJson);
+        var movie = JsonSerializer.Deserialize<TrendingMovieItem>(movieJson, WebJsonOptions);
         movie.Should().NotBeNull();
         movie!.Title.Should().Be("Dune: Part Two");
         movie.PosterUrl.Should().Be("https://example.com/dune2.jpg");
@@ -158,7 +159,7 @@ public class DomainPrimitivesTests
             }
             """;
 
-        var tv = JsonSerializer.Deserialize<TrendingTvItem>(tvJson);
+        var tv = JsonSerializer.Deserialize<TrendingTvItem>(tvJson, WebJsonOptions);
         tv.Should().NotBeNull();
         tv!.ShowName.Should().Be("Severance");
         tv.ImdbId.Should().Be("tt11280740");
@@ -189,7 +190,7 @@ public class DomainPrimitivesTests
             }
             """;
 
-        var item = JsonSerializer.Deserialize<QBitTorrentItem>(torrentJson);
+        var item = JsonSerializer.Deserialize<QBitTorrentItem>(torrentJson, WebJsonOptions);
         item.Should().NotBeNull();
         item!.Hash.Should().Be("abcdef1234567890abcdef1234567890abcdef12");
         item.SeedingTime.Should().Be(3600);
@@ -247,7 +248,7 @@ public class DomainPrimitivesTests
             }
             """;
 
-        var fileItem = JsonSerializer.Deserialize<QBitTorrentFileItem>(fileJson);
+        var fileItem = JsonSerializer.Deserialize<QBitTorrentFileItem>(fileJson, WebJsonOptions);
         fileItem.Should().NotBeNull();
         fileItem!.Index.Should().Be(0);
         fileItem.Name.Should().Be("sample.mkv");

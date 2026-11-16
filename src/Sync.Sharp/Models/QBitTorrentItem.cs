@@ -70,14 +70,14 @@ public static class QBitTorrentStateParser
 }
 
 public sealed record QBitTorrentItem(
-    [property: JsonPropertyName("hash")] string Hash,
-    [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("state")] string State,
-    [property: JsonPropertyName("progress")] double Progress,
-    [property: JsonPropertyName("size")] long Size,
-    [property: JsonPropertyName("ratio")] double Ratio,
+    string Hash,
+    string Name,
+    string State,
+    double Progress,
+    long Size,
+    double Ratio,
     [property: JsonPropertyName("seeding_time")] long SeedingTime,
-    [property: JsonPropertyName("category")] string? Category = null,
+    string? Category = null,
     [property: JsonPropertyName("content_path")] string? ContentPath = null,
     [property: JsonPropertyName("save_path")] string? SavePath = null
 )
@@ -140,11 +140,11 @@ public sealed record QBitTorrentItem(
 }
 
 public sealed record QBitTorrentFileItem(
-    [property: JsonPropertyName("index")] int Index,
-    [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("size")] long Size,
-    [property: JsonPropertyName("progress")] double Progress,
-    [property: JsonPropertyName("priority")] int Priority,
+    int Index,
+    string Name,
+    long Size,
+    double Progress,
+    int Priority,
     [property: JsonPropertyName("is_seed")] bool? IsSeed = null
 )
 {
