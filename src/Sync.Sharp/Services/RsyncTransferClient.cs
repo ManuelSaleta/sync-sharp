@@ -30,9 +30,9 @@ public sealed class RsyncTransferClient(
         var isTv = torrent.MediaCategory.IsTv();
         var remoteBaseDir = isTv ? _rsyncConfig.DestTvDir : _rsyncConfig.DestMoviesDir;
 
-        var rrsyncPrefix = _rsyncConfig.RrsyncPrefix;
+        var rrsyncPrefix = (_rsyncConfig.RrsyncPrefix ?? string.Empty).TrimEnd('/', '\\');
         var relativeDir = !string.IsNullOrWhiteSpace(rrsyncPrefix) &&
-                          remoteBaseDir.StartsWith(rrsyncPrefix, StringComparison.OrdinalIgnoreCase)
+                          StagingPathResolver.IsPathEqualOrUnderPrefix(remoteBaseDir, rrsyncPrefix)
             ? Path.GetRelativePath(rrsyncPrefix, remoteBaseDir)
             : remoteBaseDir;
 

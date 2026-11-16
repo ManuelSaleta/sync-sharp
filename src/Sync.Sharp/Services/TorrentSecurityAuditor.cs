@@ -32,10 +32,9 @@ public sealed class TorrentSecurityAuditor(ILogger<TorrentSecurityAuditor> logge
             var normalizedName = file.Name.Replace('\\', '/');
             var ext = Path.GetExtension(normalizedName);
 
-            // Security Check 1: Reject path traversal tokens
-            if (normalizedName.Contains("../", StringComparison.Ordinal) ||
-                normalizedName.StartsWith('/') ||
-                normalizedName.Contains("/../", StringComparison.Ordinal))
+            // Security Check 1: Reject path traversal tokens and rooted paths
+            if (Path.IsPathRooted(normalizedName) ||
+                normalizedName.Split('/').Contains("..", StringComparer.Ordinal))
             {
                 logger.LogError(
                     "CRITICAL SECURITY VIOLATION: Torrent '{Hash}' contains path traversal token in '{Name}'. Aborting and purging from swarm.",

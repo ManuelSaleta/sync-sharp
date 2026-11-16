@@ -22,11 +22,11 @@ public sealed class StagingPathResolver(IOptions<DownloaderConfigOpts> downloade
             throw new ArgumentException("Path cannot be empty.", nameof(remotePath));
         }
 
-        var localStaging = Path.GetFullPath(_downloaderConfig.StagingDir).TrimEnd(Path.DirectorySeparatorChar);
-        var remotePrefix = (_downloaderConfig.RemotePathPrefix ?? string.Empty).TrimEnd(Path.DirectorySeparatorChar);
+        var localStaging = Path.GetFullPath(_downloaderConfig.StagingDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var remotePrefix = (_downloaderConfig.RemotePathPrefix ?? string.Empty).TrimEnd('/', '\\');
 
         string candidatePath;
-        if (!string.IsNullOrWhiteSpace(remotePrefix) && remotePath.StartsWith(remotePrefix, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(remotePrefix) && IsPathEqualOrUnderPrefix(remotePath, remotePrefix))
         {
             var relative = Path.GetRelativePath(remotePrefix, remotePath);
             candidatePath = Path.GetFullPath(Path.Combine(localStaging, relative));
@@ -71,5 +71,17 @@ public sealed class StagingPathResolver(IOptions<DownloaderConfigOpts> downloade
         }
 
         return candidatePath;
+    }
+
+    public static bool IsPathEqualOrUnderPrefix(string path, string prefix)
+    {
+        if (string.Equals(path, prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return path.Length > prefix.Length &&
+               path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
+               (path[prefix.Length] == '/' || path[prefix.Length] == '\\');
     }
 }

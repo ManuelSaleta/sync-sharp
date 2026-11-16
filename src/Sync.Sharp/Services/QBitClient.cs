@@ -170,7 +170,7 @@ public sealed class QBitClient(
         try
         {
             var files = await GetJsonWithReauthAsync<List<QBitTorrentFileItem>>(
-                $"{BaseUrl}/api/v2/torrents/files?hash={hash}",
+                $"{BaseUrl}/api/v2/torrents/files?hash={Uri.EscapeDataString(hash)}",
                 ct);
 
             return files ?? [];
@@ -253,11 +253,20 @@ public sealed class QBitClient(
                 "Zero-Trust Policy: Deselecting {Count} non-media files (priority=0) for torrent '{Hash}'.",
                 audit.NonMediaIndices.Count,
                 hash);
-            await SetFilePrioritiesAsync(hash, audit.NonMediaIndices, priority: 0, ct);
+            if (!await SetFilePrioritiesAsync(hash, audit.NonMediaIndices, priority: 0, ct))
+            {
+                logger.LogError("Failed to deselect non-media files for torrent '{Hash}'; keeping in quarantine.", hash);
+                return false;
+            }
         }
 
         // Torrent passed security audit: safe to resume
-        await ResumeTorrentAsync(hash, ct);
+        if (!await ResumeTorrentAsync(hash, ct))
+        {
+            logger.LogError("Failed to resume audited torrent '{Hash}'.", hash);
+            return false;
+        }
+
         logger.LogInformation("Torrent '{Hash}' PASSED pre-download security audit and was unpaused for media acquisition.", hash);
         return true;
     }

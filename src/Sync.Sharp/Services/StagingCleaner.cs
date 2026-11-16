@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Sync.Sharp.Models;
 
 namespace Sync.Sharp.Services;
@@ -12,15 +13,24 @@ public interface IStagingCleaner
 }
 
 public sealed class StagingCleaner(
+    IOptions<DownloaderConfigOpts> downloaderOptions,
     IStagingPathResolver stagingPathResolver,
     ILogger<StagingCleaner> logger) : IStagingCleaner
 {
+    private readonly DownloaderConfigOpts _downloaderConfig = downloaderOptions?.Value ?? throw new ArgumentNullException(nameof(downloaderOptions));
     private readonly IStagingPathResolver _stagingPathResolver = stagingPathResolver ?? throw new ArgumentNullException(nameof(stagingPathResolver));
     private readonly ILogger<StagingCleaner> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     public async Task CleanupLocalStagingAsync(QBitTorrentItem torrent, CancellationToken ct = default)
     {
-        var rawPath = torrent.ContentPath ?? torrent.SavePath;
+        var rawPath = !string.IsNullOrWhiteSpace(torrent.ContentPath)
+            ? torrent.ContentPath
+            : (!string.IsNullOrWhiteSpace(torrent.Name)
+                ? Path.Combine(
+                    !string.IsNullOrWhiteSpace(torrent.SavePath) ? torrent.SavePath : _downloaderConfig.StagingDir,
+                    torrent.Name)
+                : null);
+
         if (string.IsNullOrWhiteSpace(rawPath))
         {
             return;
@@ -34,6 +44,17 @@ public sealed class StagingCleaner(
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to resolve local staging path '{RawPath}' for cleanup.", rawPath);
+            return;
+        }
+
+        var localStaging = Path.GetFullPath(_downloaderConfig.StagingDir)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedSource = Path.GetFullPath(sourcePath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        if (string.Equals(normalizedSource, localStaging, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Refusing to delete staging root directory '{StagingDir}' for torrent '{Name}'.", localStaging, torrent.Name);
             return;
         }
 

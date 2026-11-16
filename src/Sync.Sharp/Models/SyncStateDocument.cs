@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 namespace Sync.Sharp.Models;
 
 public sealed record MediaHistoryEntry(
