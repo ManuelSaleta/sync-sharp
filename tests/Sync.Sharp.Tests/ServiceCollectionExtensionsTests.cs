@@ -17,7 +17,7 @@ public class ServiceCollectionExtensionsTests
         var configData = new Dictionary<string, string?>
         {
             ["Schedule:IntervalMinutes"] = "15",
-            ["Schedule:StateFilePath"] = "/tmp/test-state.json",
+            ["Storage:StateFilePath"] = "/tmp/test-state.json",
             ["Vpn:Provider"] = "nordlynx",
             ["Vpn:RequiredInterface"] = "wg0",
             ["Indexer:BaseUrl"] = "http://127.0.0.1:9696",

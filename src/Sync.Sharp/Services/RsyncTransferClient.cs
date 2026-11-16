@@ -83,7 +83,7 @@ public sealed class RsyncTransferClient(
 
         var result = await Cli.Wrap("rsync")
             .WithArguments(args)
-            .WithValidation(CommandResultValidation.ZeroExitCode)
+            .WithValidation(CommandResultValidation.None)
             .ExecuteBufferedAsync(ct);
 
         if (!result.IsSuccess)

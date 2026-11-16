@@ -90,7 +90,7 @@ public static class ServiceCollectionExtensions
             .ValidateOnStart();
 
         services.AddOptions<StorageConfigOpts>()
-            .Bind(configuration.GetSection(SchedulingConfigOpts.SectionName))
+            .Bind(configuration.GetSection(StorageConfigOpts.SectionName))
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
