@@ -6,7 +6,7 @@ using Sync.Sharp.Models.Options;
 namespace Sync.Sharp.Services;
 
 public sealed class SyncOrchestrator(
-    IOptions<SchedulingConfigOpts> scheduleOptions,
+    IOptions<StorageConfigOpts> storageOptions,
     IOptions<VpnConfigOpts> vpnOptions,
     IOptions<IndexerConfigOpts> indexerOptions,
     IOptions<FiltersConfigOpts> filtersOptions,
@@ -21,7 +21,7 @@ public sealed class SyncOrchestrator(
     IMediaPollingService plexPollingService,
     ILogger<SyncOrchestrator> logger)
 {
-    private readonly SchedulingConfigOpts _scheduleConfig = scheduleOptions?.Value ?? throw new ArgumentNullException(nameof(scheduleOptions));
+    private readonly StorageConfigOpts _storageConfig = storageOptions?.Value ?? throw new ArgumentNullException(nameof(storageOptions));
     private readonly VpnConfigOpts _vpnConfig = vpnOptions?.Value ?? throw new ArgumentNullException(nameof(vpnOptions));
     private readonly IndexerConfigOpts _indexerConfig = indexerOptions?.Value ?? throw new ArgumentNullException(nameof(indexerOptions));
     private readonly FiltersConfigOpts _filtersConfig = filtersOptions?.Value ?? throw new ArgumentNullException(nameof(filtersOptions));
@@ -30,10 +30,10 @@ public sealed class SyncOrchestrator(
 
     public async Task RunCycleAsync(CancellationToken ct)
     {
-        await using var lockStream = TryAcquireLockFile(_scheduleConfig.LockFile);
+        await using var lockStream = TryAcquireLockFile(_storageConfig.LockFile);
         if (lockStream is null)
         {
-            logger.LogWarning("Another sync-sharp cycle is already holding lock '{LockFile}'; skipping.", _scheduleConfig.LockFile);
+            logger.LogWarning("Another sync-sharp cycle is already holding lock '{LockFile}'; skipping.", _storageConfig.LockFile);
             return;
         }
 

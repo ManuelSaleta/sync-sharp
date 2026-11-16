@@ -17,11 +17,11 @@ public interface IStateStore
 }
 
 public sealed class JsonStateStore(
-    IOptions<SchedulingConfigOpts> scheduleOptions,
+    IOptions<StorageConfigOpts> storageOptions,
     JsonSerializerOptions jsonOptions,
     ILogger<JsonStateStore> logger) : IStateStore
 {
-    private readonly SchedulingConfigOpts _scheduleConfig = scheduleOptions?.Value ?? throw new ArgumentNullException(nameof(scheduleOptions));
+    private readonly StorageConfigOpts _storageConfig = storageOptions?.Value ?? throw new ArgumentNullException(nameof(storageOptions));
     private readonly JsonSerializerOptions _jsonOptions = jsonOptions ?? throw new ArgumentNullException(nameof(jsonOptions));
 
     private const int InitialRequestCount = 1;
@@ -37,7 +37,7 @@ public sealed class JsonStateStore(
         await _fileLock.WaitAsync(ct);
         try
         {
-            var path = _scheduleConfig.StateFilePath;
+            var path = _storageConfig.StateFilePath;
             var dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrWhiteSpace(dir))
             {
@@ -246,7 +246,7 @@ public sealed class JsonStateStore(
 
     private async Task SaveInternalAsync(SyncStateDocument state, CancellationToken ct)
     {
-        var path = _scheduleConfig.StateFilePath;
+        var path = _storageConfig.StateFilePath;
         var tempPath = $"{path}.tmp";
 
         await using (var stream = File.Create(tempPath))

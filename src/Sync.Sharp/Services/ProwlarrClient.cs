@@ -1,7 +1,5 @@
-using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Sync.Sharp.Models;
@@ -19,24 +17,13 @@ public sealed class ProwlarrClient(
     HttpClient httpClient,
     IOptions<IndexerConfigOpts> indexerOptions,
     JsonSerializerOptions jsonOptions,
-    ILogger<ProwlarrClient> logger) : IProwlarrClient
+    ILogger<ProwlarrClient> logger,
+    IReleaseScorer? releaseScorer = null) : IProwlarrClient
 {
-    private static readonly ConcurrentDictionary<string, Regex> RegexCache = new(StringComparer.Ordinal);
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
-
-    private static readonly Regex SoloEpisodeRegex = new(
-        @"\b(S\d{1,2}\s*E\d{1,3}|\d{1,2}x\d{1,3}|E(pisode)?\s*\d{1,3})\b",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
-        RegexTimeout);
-
-    private static readonly Regex SeasonPackRegex = new(
-        @"\b(Season\s*\d+|Seasons|Complete|S\d{1,2}(?!\s*E\d+)|S\d{1,2}\s*-\s*S?\d{1,2})\b",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
-        RegexTimeout);
-
     private readonly ILogger<ProwlarrClient> _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly IndexerConfigOpts _config = indexerOptions?.Value ?? throw new ArgumentNullException(nameof(indexerOptions));
     private readonly JsonSerializerOptions _jsonOptions = jsonOptions ?? throw new ArgumentNullException(nameof(jsonOptions));
+    private readonly IReleaseScorer _releaseScorer = releaseScorer ?? new ReleaseScorer();
 
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(_config.ApiKey) &&
@@ -67,22 +54,7 @@ public sealed class ProwlarrClient(
             _jsonOptions,
             ct) ?? [];
 
-        var minBytes = filter.MinSizeMb * 1024L * 1024L;
-        var maxBytes = filter.MaxSizeMb * 1024L * 1024L;
-
-        var allowedRegexes = filter.AllowedPatterns.Select(GetOrCompileRegex).ToArray();
-        var blockedRegexes = filter.BlockedPatterns.Select(GetOrCompileRegex).ToArray();
-
-        var best = releases
-            .Where(r => !string.IsNullOrWhiteSpace(r.GetBestDownloadUri()))
-            .Where(r => (r.Seeders ?? 0) >= _config.MinSeeders)
-            .Where(r => r.Size >= minBytes && r.Size <= maxBytes)
-            .Where(r => allowedRegexes.Length == 0 || allowedRegexes.Any(rx => rx.IsMatch(r.Title)))
-            .Where(r => !blockedRegexes.Any(rx => rx.IsMatch(r.Title)))
-            .OrderByDescending(r => GetSeasonPackScore(r.Title, filter.PreferSeasonPacks))
-            .ThenByDescending(r => r.Seeders ?? 0)
-            .FirstOrDefault();
-
+        var best = _releaseScorer.SelectBestRelease(releases, filter, _config.MinSeeders);
         if (best is null) return null;
 
         _logger.LogInformation(
@@ -90,24 +62,9 @@ public sealed class ProwlarrClient(
             best.Title,
             best.Seeders ?? 0,
             best.Size / (1024 * 1024),
-            GetSeasonPackScore(best.Title, filter.PreferSeasonPacks),
+            _releaseScorer.GetSeasonPackScore(best.Title, filter.PreferSeasonPacks),
             query);
 
         return best;
     }
-
-    public static int GetSeasonPackScore(string title, bool preferSeasonPacks)
-    {
-        if (!preferSeasonPacks) return 0;
-        var isSolo = SoloEpisodeRegex.IsMatch(title);
-        var isSeason = SeasonPackRegex.IsMatch(title) && !isSolo;
-        if (isSeason) return 2;
-        if (!isSolo) return 1;
-        return 0;
-    }
-
-    private static Regex GetOrCompileRegex(string pattern) =>
-        RegexCache.GetOrAdd(
-            pattern,
-            static p => new Regex(p, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout));
 }

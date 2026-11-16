@@ -46,6 +46,7 @@ public static class BogusFactory
         [typeof(IndexerConfigOpts)] = new FakerRegistration<IndexerConfigOpts>(CreateIndexerConfigOptsFaker()),
         [typeof(RsyncConfigOpts)] = new FakerRegistration<RsyncConfigOpts>(CreateRsyncConfigOptsFaker()),
         [typeof(SchedulingConfigOpts)] = new FakerRegistration<SchedulingConfigOpts>(CreateSchedulingConfigOptsFaker()),
+        [typeof(StorageConfigOpts)] = new FakerRegistration<StorageConfigOpts>(CreateStorageConfigOptsFaker()),
         [typeof(TrendingConfigOpts)] = new FakerRegistration<TrendingConfigOpts>(CreateTrendingConfigOptsFaker()),
         [typeof(VpnConfigOpts)] = new FakerRegistration<VpnConfigOpts>(CreateVpnConfigOptsFaker())
     };
@@ -326,9 +327,15 @@ public static class BogusFactory
             {
                 IntervalMinutes = 15,
                 CronExpression = "*/15 * * * *",
-                LockFile = "/tmp/sync-sharp.lock",
                 WebhookPort = 8089,
-                WebhookSecretToken = f.Random.AlphaNumeric(16),
+                WebhookSecretToken = f.Random.AlphaNumeric(16)
+            });
+
+    private static Faker<StorageConfigOpts> CreateStorageConfigOptsFaker() =>
+        new Faker<StorageConfigOpts>()
+            .CustomInstantiator(_ => new StorageConfigOpts
+            {
+                LockFile = "/tmp/sync-sharp.lock",
                 StateFilePath = "/tmp/sync-sharp-state.json"
             });
 

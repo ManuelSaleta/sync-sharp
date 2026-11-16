@@ -22,7 +22,7 @@ public class JsonStateStoreTests : IDisposable
     [Fact]
     public async Task InitializeRecordAndMarkSynced_ShouldPersistStateCorrectly()
     {
-        var options = Options.Create(new SchedulingConfigOpts
+        var options = Options.Create(new StorageConfigOpts
         {
             StateFilePath = _stateFilePath
         });
@@ -68,7 +68,7 @@ public class JsonStateStoreTests : IDisposable
         """;
         await File.WriteAllTextAsync(_stateFilePath, legacyJson);
 
-        var options = Options.Create(new SchedulingConfigOpts
+        var options = Options.Create(new StorageConfigOpts
         {
             StateFilePath = _stateFilePath
         });

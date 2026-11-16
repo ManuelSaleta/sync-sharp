@@ -89,6 +89,11 @@ public static class ServiceCollectionExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        services.AddOptions<StorageConfigOpts>()
+            .Bind(configuration.GetSection(SchedulingConfigOpts.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
         services.AddOptions<VpnConfigOpts>()
             .Bind(configuration.GetSection(VpnConfigOpts.SectionName))
             .ValidateDataAnnotations()
@@ -149,8 +154,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<JsonStateStore>();
         services.AddSingleton<IStateStore>(sp => sp.GetRequiredService<JsonStateStore>());
         services.AddSingleton<ITorrentSecurityAuditor, TorrentSecurityAuditor>();
+        services.AddSingleton<IReleaseScorer, ReleaseScorer>();
         services.AddSingleton<IMediaValidator, MediaValidator>();
         services.AddSingleton<IStagingPathResolver, StagingPathResolver>();
+        services.AddSingleton<IRsyncTransferClient, RsyncTransferClient>();
+        services.AddSingleton<IStagingCleaner, StagingCleaner>();
 
         services.AddPlexClient(options =>
         {

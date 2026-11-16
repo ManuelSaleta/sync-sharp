@@ -18,11 +18,6 @@ public class SchedulingConfigOpts
     public string CronExpression { get; set; } = string.Empty;
 
     /// <summary>
-    /// File system path to the exclusive lock file preventing concurrent orchestrator executions.
-    /// </summary>
-    public string LockFile { get; set; } = string.Empty;
-
-    /// <summary>
     /// Port listened on by <c>SyncSchedulerWorker</c> when running as a hosted service in daemon mode for on-demand sync triggers and health probes.
     /// </summary>
     [Range(0, 65535)]
@@ -32,10 +27,4 @@ public class SchedulingConfigOpts
     /// Optional shared secret token required in X-Webhook-Token or Bearer Authorization header to trigger sync runs.
     /// </summary>
     public string? WebhookSecretToken { get; set; }
-
-    /// <summary>
-    /// Local file system path to the persistent JSON state database storing acquired release history.
-    /// </summary>
-    [Required(AllowEmptyStrings = false)]
-    public string StateFilePath { get; set; } = string.Empty;
 }

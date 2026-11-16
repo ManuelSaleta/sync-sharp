@@ -48,6 +48,7 @@ public class ServiceCollectionExtensionsTests
         provider.GetService<ITrendingFeedClient>().Should().NotBeNull();
         provider.GetService<ProwlarrClient>().Should().NotBeNull();
         provider.GetService<IProwlarrClient>().Should().NotBeNull();
+        provider.GetService<IReleaseScorer>().Should().NotBeNull();
         provider.GetService<QBitClient>().Should().NotBeNull();
         provider.GetService<IQBitClient>().Should().NotBeNull();
         provider.GetService<ITorrentSecurityAuditor>().Should().NotBeNull();
@@ -55,6 +56,8 @@ public class ServiceCollectionExtensionsTests
         provider.GetService<IMediaTransferService>().Should().NotBeNull();
         provider.GetService<IMediaValidator>().Should().NotBeNull();
         provider.GetService<IStagingPathResolver>().Should().NotBeNull();
+        provider.GetService<IRsyncTransferClient>().Should().NotBeNull();
+        provider.GetService<IStagingCleaner>().Should().NotBeNull();
 
         using var scope = provider.CreateScope();
         scope.ServiceProvider.GetService<SyncOrchestrator>().Should().NotBeNull();
@@ -64,6 +67,9 @@ public class ServiceCollectionExtensionsTests
 
         var scheduleOpts = provider.GetRequiredService<IOptions<SchedulingConfigOpts>>().Value;
         scheduleOpts.IntervalMinutes.Should().Be(15);
+
+        var storageOpts = provider.GetRequiredService<IOptions<StorageConfigOpts>>().Value;
+        storageOpts.StateFilePath.Should().Be("/tmp/test-state.json");
     }
 
     [Fact]
