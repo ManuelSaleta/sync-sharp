@@ -144,11 +144,6 @@ public sealed class MediaTransferService(
         return true;
     }
 
-    public void CleanupLocalStaging(QBitTorrentItem torrent)
-    {
-        CleanupLocalStagingAsync(torrent, CancellationToken.None).GetAwaiter().GetResult();
-    }
-
     public async Task CleanupLocalStagingAsync(QBitTorrentItem torrent, CancellationToken ct = default)
     {
         var rawPath = torrent.ContentPath ?? torrent.SavePath;

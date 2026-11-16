@@ -12,9 +12,7 @@ public interface IStateStore
     bool IsExternalIdProcessed(string externalId);
     bool IsHashProcessed(string infoHash);
     bool IsHashSynced(string infoHash);
-    Task RecordGrabbedAsync(string? externalId, string? infoHash, string title, string category, CancellationToken ct);
     Task RecordGrabbedAsync(string? externalId, string? infoHash, string title, MediaCategory category, CancellationToken ct);
-    Task MarkSyncedAsync(string infoHash, string title, string category, CancellationToken ct);
     Task MarkSyncedAsync(string infoHash, string title, MediaCategory category, CancellationToken ct);
 }
 
@@ -124,14 +122,6 @@ public sealed class JsonStateStore(
         }
     }
 
-    public Task RecordGrabbedAsync(
-        string? externalId,
-        string? infoHash,
-        string title,
-        string category,
-        CancellationToken ct) =>
-        RecordGrabbedAsync(externalId, infoHash, title, MediaCategoryParser.FromStringOrDefault(category), ct);
-
     public async Task RecordGrabbedAsync(
         string? externalId,
         string? infoHash,
@@ -177,13 +167,6 @@ public sealed class JsonStateStore(
             _fileLock.Release();
         }
     }
-
-    public Task MarkSyncedAsync(
-        string infoHash,
-        string title,
-        string category,
-        CancellationToken ct) =>
-        MarkSyncedAsync(infoHash, title, MediaCategoryParser.FromStringOrDefault(category), ct);
 
     public async Task MarkSyncedAsync(
         string infoHash,

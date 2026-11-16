@@ -30,45 +30,6 @@ public enum QBitTorrentState
     StoppedUP
 }
 
-/// <summary>
-/// Parser for qBittorrent state strings.
-/// </summary>
-public static class QBitTorrentStateParser
-{
-    public static QBitTorrentState Parse(string? state)
-    {
-        if (string.IsNullOrWhiteSpace(state))
-        {
-            return QBitTorrentState.Unknown;
-        }
-
-        return state.Trim().ToLowerInvariant() switch
-        {
-            "allocating" => QBitTorrentState.Allocating,
-            "downloading" => QBitTorrentState.Downloading,
-            "metadl" => QBitTorrentState.MetaDL,
-            "forceddl" => QBitTorrentState.ForcedDL,
-            "pauseddl" => QBitTorrentState.PausedDL,
-            "queueddl" => QBitTorrentState.QueuedDL,
-            "checkingdl" => QBitTorrentState.CheckingDL,
-            "stalleddl" => QBitTorrentState.StalledDL,
-            "uploading" => QBitTorrentState.Uploading,
-            "pausedup" => QBitTorrentState.PausedUP,
-            "queuedup" => QBitTorrentState.QueuedUP,
-            "stalledup" => QBitTorrentState.StalledUP,
-            "checkingup" => QBitTorrentState.CheckingUP,
-            "forcedup" => QBitTorrentState.ForcedUP,
-            "checkingresumedata" => QBitTorrentState.CheckingResumeData,
-            "moving" => QBitTorrentState.Moving,
-            "missingfiles" => QBitTorrentState.MissingFiles,
-            "error" => QBitTorrentState.Error,
-            "stoppeddl" => QBitTorrentState.StoppedDL,
-            "stoppedup" => QBitTorrentState.StoppedUP,
-            _ => QBitTorrentState.Unknown
-        };
-    }
-}
-
 public sealed record QBitTorrentItem(
     string Hash,
     string Name,
@@ -124,7 +85,12 @@ public sealed record QBitTorrentItem(
     /// Strongly-typed <see cref="QBitTorrentState"/> parsed from <see cref="State"/>.
     /// </summary>
     [JsonIgnore]
-    public QBitTorrentState TorrentState => QBitTorrentStateParser.Parse(State);
+    public QBitTorrentState TorrentState =>
+        !string.IsNullOrWhiteSpace(State) &&
+        Enum.TryParse<QBitTorrentState>(State.Trim(), ignoreCase: true, out var parsed) &&
+        Enum.IsDefined(parsed)
+            ? parsed
+            : QBitTorrentState.Unknown;
 }
 
 public sealed record QBitTorrentFileItem(

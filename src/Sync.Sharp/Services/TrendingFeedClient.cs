@@ -7,13 +7,7 @@ using Sync.Sharp.Models.Options;
 
 namespace Sync.Sharp.Services;
 
-public sealed record DiscoveryCandidate(string ExternalId, string SearchQuery, MediaCategory Category)
-{
-    public DiscoveryCandidate(string externalId, string searchQuery, string category)
-        : this(externalId, searchQuery, MediaCategoryParser.FromStringOrDefault(category))
-    {
-    }
-}
+public sealed record DiscoveryCandidate(string ExternalId, string SearchQuery, MediaCategory Category);
 
 public interface ITrendingFeedClient
 {

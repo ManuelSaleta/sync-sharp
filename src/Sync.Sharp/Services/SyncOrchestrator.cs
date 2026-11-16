@@ -93,6 +93,12 @@ public sealed class SyncOrchestrator(
 
         if (await IsMediaAlreadyPresent(mediaCandidate, ct))
         {
+            await stateStore.RecordGrabbedAsync(
+                mediaCandidate.Id,
+                mediaCandidate.InfoHash,
+                mediaCandidate.Title,
+                mediaCandidate.Category,
+                ct);
             return false;
         }
 
@@ -120,6 +126,12 @@ public sealed class SyncOrchestrator(
 
         if (await IsMediaAlreadyPresent(mediaCandidate, ct))
         {
+            await stateStore.RecordGrabbedAsync(
+                mediaCandidate.Id,
+                mediaCandidate.InfoHash,
+                mediaCandidate.Title,
+                mediaCandidate.Category,
+                ct);
             return false;
         }
 
@@ -158,7 +170,7 @@ public sealed class SyncOrchestrator(
                 await stateStore.MarkSyncedAsync(torrent.Hash, torrent.Name, category, ct);
                 isSynced = true;
 
-                _ = plexPollingService.ForceScanLibraryAsync(category, ct);
+                await TriggerPlexScanAsync(category, ct);
             }
 
             if (isSynced)
@@ -196,6 +208,18 @@ public sealed class SyncOrchestrator(
         public string SearchQuery { get; set; } = string.Empty;
     }
 
+    private async Task TriggerPlexScanAsync(MediaCategory category, CancellationToken ct)
+    {
+        try
+        {
+            await plexPollingService.ForceScanLibraryAsync(category, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to trigger Plex library scan for category {Category}.", category);
+        }
+    }
+
     public async Task<bool> IsMediaAlreadyPresent(MediaCandidate candidate, CancellationToken ct)
     {
         // Target release check: Verify matched release does not already exist in Plex before quarantining
@@ -205,13 +229,6 @@ public sealed class SyncOrchestrator(
                 "Skipping release '{ReleaseTitle}' for candidate '{Query}' - target media already exists in Plex server library.",
                 candidate.Title,
                 candidate.SearchQuery);
-
-            await stateStore.RecordGrabbedAsync(
-                candidate.Id,
-                candidate.InfoHash,
-                candidate.Title,
-                candidate.Category,
-                ct);
 
             return true;
         }

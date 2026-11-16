@@ -64,43 +64,11 @@ public class DomainPrimitivesTests
         var deserializedTv = JsonSerializer.Deserialize<MediaCategory>("\"tv\"");
         deserializedTv.Should().Be(MediaCategory.Tv);
 
-        var deserializedShows = JsonSerializer.Deserialize<MediaCategory>("\"shows\"");
-        deserializedShows.Should().Be(MediaCategory.Tv);
-
         var deserializedMovies = JsonSerializer.Deserialize<MediaCategory>("\"movies\"");
         deserializedMovies.Should().Be(MediaCategory.Movies);
 
-        var deserializedFloat = JsonSerializer.Deserialize<MediaCategory>("1.5");
-        deserializedFloat.Should().Be(MediaCategory.Movies);
-    }
-
-    [Theory]
-    [InlineData("grabbed", MediaSyncStatus.Grabbed)]
-    [InlineData("GRABBED", MediaSyncStatus.Grabbed)]
-    [InlineData("Grabbed", MediaSyncStatus.Grabbed)]
-    [InlineData("synced", MediaSyncStatus.Synced)]
-    [InlineData("SYNCED", MediaSyncStatus.Synced)]
-    [InlineData("Synced", MediaSyncStatus.Synced)]
-    public void MediaSyncStatusParser_Parse_ShouldParseCorrectly(string input, MediaSyncStatus expected)
-    {
-        var result = MediaSyncStatusParser.Parse(input);
-        result.Should().Be(expected);
-
-        var tryParsed = MediaSyncStatusParser.TryParse(input, out var status);
-        tryParsed.Should().BeTrue();
-        status.Should().Be(expected);
-    }
-
-    [Fact]
-    public void MediaSyncStatusParser_Parse_InvalidInput_ShouldThrowArgumentException()
-    {
-        var action = () => MediaSyncStatusParser.Parse("unknown-status");
-        action.Should().Throw<ArgumentException>();
-
-        MediaSyncStatusParser.TryParse("unknown-status", out var status).Should().BeFalse();
-        status.Should().Be(MediaSyncStatus.Grabbed);
-
-        MediaSyncStatusParser.FromStringOrDefault("unknown-status", MediaSyncStatus.Synced).Should().Be(MediaSyncStatus.Synced);
+        var invalidAction = () => JsonSerializer.Deserialize<MediaCategory>("1.5");
+        invalidAction.Should().Throw<JsonException>();
     }
 
     [Fact]
@@ -128,8 +96,8 @@ public class DomainPrimitivesTests
         var deserializedSynced = JsonSerializer.Deserialize<MediaSyncStatus>("\"synced\"");
         deserializedSynced.Should().Be(MediaSyncStatus.Synced);
 
-        var deserializedFloat = JsonSerializer.Deserialize<MediaSyncStatus>("1.5");
-        deserializedFloat.Should().Be(MediaSyncStatus.Grabbed);
+        var invalidAction = () => JsonSerializer.Deserialize<MediaSyncStatus>("1.5");
+        invalidAction.Should().Throw<JsonException>();
     }
 
     [Fact]

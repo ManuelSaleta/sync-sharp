@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Sync.Sharp.Models;
 using Sync.Sharp.Models.Options;
 using Sync.Sharp.Services;
 
@@ -31,13 +32,13 @@ public class JsonStateStoreTests : IDisposable
         await store.InitializeAsync(CancellationToken.None);
         File.Exists(_stateFilePath).Should().BeTrue();
 
-        await store.RecordGrabbedAsync("tt1234567", "ABCDEF123456", "Test Movie 2026", "movies", CancellationToken.None);
+        await store.RecordGrabbedAsync("tt1234567", "ABCDEF123456", "Test Movie 2026", MediaCategory.Movies, CancellationToken.None);
 
         store.IsExternalIdProcessed("tt1234567").Should().BeTrue();
         store.IsHashProcessed("abcdef123456").Should().BeTrue();
         store.IsHashSynced("abcdef123456").Should().BeFalse();
 
-        await store.MarkSyncedAsync("abcdef123456", "Test Movie 2026", "movies", CancellationToken.None);
+        await store.MarkSyncedAsync("abcdef123456", "Test Movie 2026", MediaCategory.Movies, CancellationToken.None);
         store.IsHashSynced("ABCDEF123456").Should().BeTrue();
 
         // Reload in a second instance to verify disk persistence

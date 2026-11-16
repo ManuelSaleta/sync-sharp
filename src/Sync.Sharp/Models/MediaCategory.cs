@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Sync.Sharp.Models;
@@ -6,10 +5,12 @@ namespace Sync.Sharp.Models;
 /// <summary>
 /// Strongly-typed media category domain primitive representing media classification (Movies or TV).
 /// </summary>
-[JsonConverter(typeof(MediaCategoryJsonConverter))]
+[JsonConverter(typeof(JsonStringEnumConverter<MediaCategory>))]
 public enum MediaCategory
 {
+    [JsonStringEnumMemberName("movies")]
     Movies,
+    [JsonStringEnumMemberName("tv")]
     Tv
 }
 
@@ -106,27 +107,4 @@ public static class MediaCategoryExtensions
 
     public static bool IsTv(this MediaCategory category) => category == MediaCategory.Tv;
     public static bool IsMovies(this MediaCategory category) => category == MediaCategory.Movies;
-}
-
-/// <summary>
-/// JSON converter for <see cref="MediaCategory"/> that supports flexible reading of strings ("movies", "tv", "show", "shows")
-/// and outputs canonical normalized strings ("movies" or "tv").
-/// </summary>
-public sealed class MediaCategoryJsonConverter : JsonConverter<MediaCategory>
-{
-    public override MediaCategory Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-    {
-        if (reader.TokenType == JsonTokenType.String &&
-            MediaCategoryParser.TryParse(reader.GetString(), out var parsed))
-        {
-            return parsed;
-        }
-
-        return MediaCategory.Movies;
-    }
-
-    public override void Write(Utf8JsonWriter writer, MediaCategory value, JsonSerializerOptions options)
-    {
-        writer.WriteStringValue(value.ToNormalizedString());
-    }
 }

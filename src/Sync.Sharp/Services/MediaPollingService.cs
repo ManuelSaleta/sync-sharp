@@ -12,11 +12,8 @@ public interface IMediaPollingService
     Task<bool> ForceScanLibraryAsync(string id, CancellationToken ct = default);
     Task<bool> ForceScanLibraryAsync(MediaCategory category, CancellationToken ct = default);
     Task<IReadOnlyList<PlexMetadataItem>?> GetCollectionAsync(string id, CancellationToken ct = default);
-    Task<bool> IsMediaAlreadyPresentAsync(string title, string category, int? year = null, CancellationToken ct = default);
     Task<bool> IsMediaAlreadyPresentAsync(string title, MediaCategory category, int? year = null, CancellationToken ct = default);
-    Task<PlexMetadataItem?> FindExistingMediaAsync(string title, string category, int? year = null, CancellationToken ct = default);
     Task<PlexMetadataItem?> FindExistingMediaAsync(string title, MediaCategory category, int? year = null, CancellationToken ct = default);
-    Task<IReadOnlyList<PlexMetadataItem>> SearchLibraryAsync(string query, string category, CancellationToken ct = default);
     Task<IReadOnlyList<PlexMetadataItem>> SearchLibraryAsync(string query, MediaCategory category, CancellationToken ct = default);
 }
 
@@ -75,19 +72,13 @@ public sealed class MediaPollingService(IPlexClient client, ILogger<MediaPolling
         }
     }
 
-    public async Task<bool> IsMediaAlreadyPresentAsync(string title, string category, int? year = null, CancellationToken ct = default)
+    public async Task<bool> IsMediaAlreadyPresentAsync(string title, MediaCategory category, int? year = null, CancellationToken ct = default)
     {
         var match = await FindExistingMediaAsync(title, category, year, ct);
         return match is not null;
     }
 
-    public Task<bool> IsMediaAlreadyPresentAsync(string title, MediaCategory category, int? year = null, CancellationToken ct = default) =>
-        IsMediaAlreadyPresentAsync(title, category.ToNormalizedString(), year, ct);
-
-    public Task<PlexMetadataItem?> FindExistingMediaAsync(string title, MediaCategory category, int? year = null, CancellationToken ct = default) =>
-        FindExistingMediaAsync(title, category.ToNormalizedString(), year, ct);
-
-    public async Task<PlexMetadataItem?> FindExistingMediaAsync(string title, string category, int? year = null, CancellationToken ct = default)
+    public async Task<PlexMetadataItem?> FindExistingMediaAsync(string title, MediaCategory category, int? year = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(title))
         {
@@ -96,7 +87,7 @@ public sealed class MediaPollingService(IPlexClient client, ILogger<MediaPolling
 
         try
         {
-            var sectionKey = MapCategoryToSectionKey(category);
+            var sectionKey = category.ToPlexSectionKey();
             var existingItems = await GetCollectionAsync(sectionKey, ct);
 
             if (existingItems is { Count: > 0 })
@@ -145,10 +136,7 @@ public sealed class MediaPollingService(IPlexClient client, ILogger<MediaPolling
         return null;
     }
 
-    public Task<IReadOnlyList<PlexMetadataItem>> SearchLibraryAsync(string query, MediaCategory category, CancellationToken ct = default) =>
-        SearchLibraryAsync(query, category.ToNormalizedString(), ct);
-
-    public async Task<IReadOnlyList<PlexMetadataItem>> SearchLibraryAsync(string query, string category, CancellationToken ct = default)
+    public async Task<IReadOnlyList<PlexMetadataItem>> SearchLibraryAsync(string query, MediaCategory category, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(query))
         {
@@ -158,9 +146,9 @@ public sealed class MediaPollingService(IPlexClient client, ILogger<MediaPolling
         return await SearchHubsAsync(query, category, ct);
     }
 
-    private async Task<IReadOnlyList<PlexMetadataItem>> SearchHubsAsync(string query, string category, CancellationToken ct)
+    private async Task<IReadOnlyList<PlexMetadataItem>> SearchHubsAsync(string query, MediaCategory category, CancellationToken ct)
     {
-        var targetType = MediaCategoryParser.FromStringOrDefault(category).ToPlexTargetType();
+        var targetType = category.ToPlexTargetType();
 
         var endpoint = $"hubs/search?query={Uri.EscapeDataString(query)}";
 
@@ -209,9 +197,6 @@ public sealed class MediaPollingService(IPlexClient client, ILogger<MediaPolling
             return Array.Empty<PlexMetadataItem>();
         }
     }
-
-    private static string MapCategoryToSectionKey(string category) =>
-        MediaCategoryParser.FromStringOrDefault(category).ToPlexSectionKey();
 
     private async Task<int> ResolveSectionIdAsync(string id, CancellationToken ct)
     {

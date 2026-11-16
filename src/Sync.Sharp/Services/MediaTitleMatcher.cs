@@ -128,13 +128,7 @@ public static partial class MediaTitleMatcher
     /// <summary>
     /// Evaluates whether a raw candidate or torrent release title matches an existing Plex metadata item.
     /// </summary>
-    public static bool IsMatch(string rawTitle, MediaCategory category, PlexMetadataItem libraryItem, int? explicitYear = null) =>
-        IsMatch(rawTitle, category.ToNormalizedString(), libraryItem, explicitYear);
-
-    /// <summary>
-    /// Evaluates whether a raw candidate or torrent release title matches an existing Plex metadata item.
-    /// </summary>
-    public static bool IsMatch(string rawTitle, string category, PlexMetadataItem libraryItem, int? explicitYear = null)
+    public static bool IsMatch(string rawTitle, MediaCategory category, PlexMetadataItem libraryItem, int? explicitYear = null)
     {
         if (string.IsNullOrWhiteSpace(rawTitle) || libraryItem is null)
         {

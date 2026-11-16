@@ -15,9 +15,7 @@ public interface IQBitClient
     bool IsConfigured { get; }
     Task<bool> EnsureAuthenticatedAsync(CancellationToken ct);
     Task<bool> AddTorrentAsync(string downloadUri, MediaCategory category, CancellationToken ct);
-    Task<bool> AddTorrentAsync(string downloadUri, string category, CancellationToken ct);
     Task<bool> AddTorrentQuarantinedAsync(string downloadUri, MediaCategory category, CancellationToken ct);
-    Task<bool> AddTorrentQuarantinedAsync(string downloadUri, string category, CancellationToken ct);
     Task<bool> AuditAndQuarantineTorrentAsync(string hash, CancellationToken ct);
     Task AuditPendingQuarantinedTorrentsAsync(CancellationToken ct);
     Task<IReadOnlyList<QBitTorrentItem>> GetCompletedTorrentsAsync(CancellationToken ct);
@@ -97,9 +95,10 @@ public sealed class QBitClient(
 
         if (resp.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {
+            var statusCode = resp.StatusCode;
             resp.Dispose();
             _authenticated = false;
-            logger.LogDebug("qBittorrent session expired (HTTP {Status}); re-authenticating...", resp.StatusCode);
+            logger.LogDebug("qBittorrent session expired (HTTP {Status}); re-authenticating...", statusCode);
 
             if (!await EnsureAuthenticatedAsync(ct))
             {
@@ -125,52 +124,25 @@ public sealed class QBitClient(
         return await resp.Content.ReadFromJsonAsync<T>(_jsonOptions, ct);
     }
 
-    public static readonly string[] BlacklistedDangerousExtensions =
-    [
-        // Executables & script droppers
-        ".exe", ".scr", ".bat", ".cmd", ".ps1", ".vbs", ".sh", ".jar",
-        ".iso", ".dmg", ".lnk", ".pif", ".cpl", ".msi", ".dll", ".com",
-        ".hta", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".msc", ".gadget",
-        ".bin", ".app", ".apk", ".deb", ".rpm",
-        // Compressed archives (prevent decompression bombs and nested trojans)
-        ".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz", ".zst",
-        ".cab", ".arj", ".lzh", ".ace", ".uue", ".bz", ".tgz"
-    ];
-
-    public static readonly string[] AllowedMediaExtensions =
-    [
-        ".mkv", ".mp4", ".mov", ".avi", ".webm"
-    ];
-
-    public static readonly string[] AllowedSubtitleExtensions =
-    [
-        ".srt"
-    ];
-
-    public Task<bool> AddTorrentAsync(string downloadUri, MediaCategory category, CancellationToken ct) =>
-        AddTorrentAsync(downloadUri, category.ToNormalizedString(), ct);
-
-    public async Task<bool> AddTorrentAsync(string downloadUri, string category, CancellationToken ct)
+    public async Task<bool> AddTorrentAsync(string downloadUri, MediaCategory category, CancellationToken ct)
     {
         // Enforce Quarantine Pattern: Always add torrents in paused state
         return await AddTorrentQuarantinedAsync(downloadUri, category, ct);
     }
 
-    public Task<bool> AddTorrentQuarantinedAsync(string downloadUri, MediaCategory category, CancellationToken ct) =>
-        AddTorrentQuarantinedAsync(downloadUri, category.ToNormalizedString(), ct);
-
-    public async Task<bool> AddTorrentQuarantinedAsync(string downloadUri, string category, CancellationToken ct)
+    public async Task<bool> AddTorrentQuarantinedAsync(string downloadUri, MediaCategory category, CancellationToken ct)
     {
+        var normalizedCategory = category.ToNormalizedString();
         var clientBaseDir = !string.IsNullOrWhiteSpace(_config.RemotePathPrefix)
             ? _config.RemotePathPrefix
             : _config.StagingDir;
-        var savePath = Path.Combine(clientBaseDir, category);
+        var savePath = Path.Combine(clientBaseDir, normalizedCategory);
 
         using var resp = await SendWithReauthAsync(() => new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/api/v2/torrents/add")
         {
             Content = new FormUrlEncodedContent([
                 new KeyValuePair<string, string>("urls", downloadUri),
-                new KeyValuePair<string, string>("category", category),
+                new KeyValuePair<string, string>("category", normalizedCategory),
                 new KeyValuePair<string, string>("savepath", savePath),
                 new KeyValuePair<string, string>("paused", "true"),
                 new KeyValuePair<string, string>("ratioLimit", _config.RatioLimit.ToString(CultureInfo.InvariantCulture)),
