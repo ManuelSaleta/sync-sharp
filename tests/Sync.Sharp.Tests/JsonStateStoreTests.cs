@@ -47,6 +47,45 @@ public class JsonStateStoreTests : IDisposable
         reloadedStore.IsHashSynced("abcdef123456").Should().BeTrue();
     }
 
+    [Fact]
+    public async Task InitializeAsync_ShouldRecreateIncompatibleStateFile_WithDefaultSerialization()
+    {
+        const string legacyJson = """
+        {
+          "items": [
+            {
+              "externalId": "tt7654321",
+              "infoHash": "deadbeef1234",
+              "title": "Legacy Movie",
+              "category": "movies",
+              "status": "synced",
+              "createdAt": "2026-01-01T00:00:00Z",
+              "syncedAt": "2026-01-01T01:00:00Z"
+            }
+          ]
+        }
+        """;
+        await File.WriteAllTextAsync(_stateFilePath, legacyJson);
+
+        var options = Options.Create(new SchedulingConfigOpts
+        {
+            StateFilePath = _stateFilePath
+        });
+        var snakeCaseOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+        };
+        var store = new JsonStateStore(options, snakeCaseOptions, NullLogger<JsonStateStore>.Instance);
+
+        await store.InitializeAsync(CancellationToken.None);
+
+        store.IsExternalIdProcessed("tt7654321").Should().BeFalse();
+
+        var rebuiltJson = await File.ReadAllTextAsync(_stateFilePath);
+        rebuiltJson.Should().NotContain("\"externalId\"");
+        rebuiltJson.Should().Contain("\"items\"");
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDir))

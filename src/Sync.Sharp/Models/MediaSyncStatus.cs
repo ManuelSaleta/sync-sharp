@@ -86,21 +86,10 @@ public sealed class MediaSyncStatusJsonConverter : JsonConverter<MediaSyncStatus
 {
     public override MediaSyncStatus Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        if (reader.TokenType == JsonTokenType.String)
+        if (reader.TokenType == JsonTokenType.String &&
+            MediaSyncStatusParser.TryParse(reader.GetString(), out var parsed))
         {
-            var str = reader.GetString();
-            if (MediaSyncStatusParser.TryParse(str, out var parsed))
-            {
-                return parsed;
-            }
-        }
-        else if (reader.TokenType == JsonTokenType.Number)
-        {
-            var intVal = reader.GetInt32();
-            if (Enum.IsDefined(typeof(MediaSyncStatus), intVal))
-            {
-                return (MediaSyncStatus)intVal;
-            }
+            return parsed;
         }
 
         return MediaSyncStatus.Grabbed;

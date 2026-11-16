@@ -116,21 +116,10 @@ public sealed class MediaCategoryJsonConverter : JsonConverter<MediaCategory>
 {
     public override MediaCategory Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
-        if (reader.TokenType == JsonTokenType.String)
+        if (reader.TokenType == JsonTokenType.String &&
+            MediaCategoryParser.TryParse(reader.GetString(), out var parsed))
         {
-            var str = reader.GetString();
-            if (MediaCategoryParser.TryParse(str, out var parsed))
-            {
-                return parsed;
-            }
-        }
-        else if (reader.TokenType == JsonTokenType.Number)
-        {
-            var intVal = reader.GetInt32();
-            if (Enum.IsDefined(typeof(MediaCategory), intVal))
-            {
-                return (MediaCategory)intVal;
-            }
+            return parsed;
         }
 
         return MediaCategory.Movies;

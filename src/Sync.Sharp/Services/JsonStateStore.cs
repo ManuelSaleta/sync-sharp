@@ -40,6 +40,12 @@ public sealed class JsonStateStore(
                     stream,
                     _jsonOptions,
                     ct) ?? new([]);
+
+                if (loaded.Items.Any(i => i.InfoHash is null || i.CreatedAt == default))
+                {
+                    loaded = new([]);
+                    await SaveInternalAsync(loaded, ct);
+                }
             }
             else
             {

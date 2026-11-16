@@ -85,18 +85,6 @@ public sealed record QBitTorrentItem(
     [JsonIgnore]
     public long SeedingTimeSeconds => SeedingTime;
 
-    [JsonIgnore]
-    [Obsolete("Use SeedingTime instead.")]
-    public long Seeding_Time => SeedingTime;
-
-    [JsonIgnore]
-    [Obsolete("Use ContentPath instead.")]
-    public string? Content_Path => ContentPath;
-
-    [JsonIgnore]
-    [Obsolete("Use SavePath instead.")]
-    public string? Save_Path => SavePath;
-
     /// <summary>
     /// Gets whether the torrent has completed downloading (progress >= 1.0 or state indicates completed/seeding).
     /// </summary>
@@ -107,24 +95,24 @@ public sealed record QBitTorrentItem(
     /// Gets whether the torrent is currently in seeding/upload mode.
     /// </summary>
     [JsonIgnore]
-    public bool IsSeeding =>
-        string.Equals(State, "uploading", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(State, "stalledUP", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(State, "forcedUP", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(State, "queuedUP", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(State, "checkingUP", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(State, "pausedUP", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(State, "stoppedUP", StringComparison.OrdinalIgnoreCase);
+    public bool IsSeeding => TorrentState is
+        QBitTorrentState.Uploading or
+        QBitTorrentState.StalledUP or
+        QBitTorrentState.ForcedUP or
+        QBitTorrentState.QueuedUP or
+        QBitTorrentState.CheckingUP or
+        QBitTorrentState.PausedUP or
+        QBitTorrentState.StoppedUP;
 
     /// <summary>
     /// Gets whether the torrent is currently paused or stopped.
     /// </summary>
     [JsonIgnore]
-    public bool IsPaused =>
-        string.Equals(State, "pausedDL", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(State, "stoppedDL", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(State, "pausedUP", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(State, "stoppedUP", StringComparison.OrdinalIgnoreCase);
+    public bool IsPaused => TorrentState is
+        QBitTorrentState.PausedDL or
+        QBitTorrentState.StoppedDL or
+        QBitTorrentState.PausedUP or
+        QBitTorrentState.StoppedUP;
 
     /// <summary>
     /// Strongly-typed <see cref="MediaCategory"/> parsed from <see cref="Category"/>.
@@ -146,9 +134,4 @@ public sealed record QBitTorrentFileItem(
     double Progress,
     int Priority,
     [property: JsonPropertyName("is_seed")] bool? IsSeed = null
-)
-{
-    [JsonIgnore]
-    [Obsolete("Use IsSeed instead.")]
-    public bool? Is_Seed => IsSeed;
-}
+);

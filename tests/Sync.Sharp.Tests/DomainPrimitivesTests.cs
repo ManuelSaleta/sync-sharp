@@ -69,6 +69,9 @@ public class DomainPrimitivesTests
 
         var deserializedMovies = JsonSerializer.Deserialize<MediaCategory>("\"movies\"");
         deserializedMovies.Should().Be(MediaCategory.Movies);
+
+        var deserializedFloat = JsonSerializer.Deserialize<MediaCategory>("1.5");
+        deserializedFloat.Should().Be(MediaCategory.Movies);
     }
 
     [Theory]
@@ -124,6 +127,9 @@ public class DomainPrimitivesTests
 
         var deserializedSynced = JsonSerializer.Deserialize<MediaSyncStatus>("\"synced\"");
         deserializedSynced.Should().Be(MediaSyncStatus.Synced);
+
+        var deserializedFloat = JsonSerializer.Deserialize<MediaSyncStatus>("1.5");
+        deserializedFloat.Should().Be(MediaSyncStatus.Grabbed);
     }
 
     [Fact]
@@ -205,12 +211,6 @@ public class DomainPrimitivesTests
         item.IsCompleted.Should().BeTrue();
         item.IsSeeding.Should().BeTrue();
         item.IsPaused.Should().BeTrue();
-
-#pragma warning disable CS0618
-        item.Seeding_Time.Should().Be(3600);
-        item.Content_Path.Should().Be("/downloads/movies/Dune.Part.Two.2024.1080p.mkv");
-        item.Save_Path.Should().Be("/downloads/movies");
-#pragma warning restore CS0618
     }
 
     [Fact]
@@ -253,9 +253,5 @@ public class DomainPrimitivesTests
         fileItem!.Index.Should().Be(0);
         fileItem.Name.Should().Be("sample.mkv");
         fileItem.IsSeed.Should().BeTrue();
-
-#pragma warning disable CS0618
-        fileItem.Is_Seed.Should().BeTrue();
-#pragma warning restore CS0618
     }
 }

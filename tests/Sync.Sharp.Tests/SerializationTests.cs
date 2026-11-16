@@ -25,15 +25,16 @@ public class SerializationTests
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) }
     };
 
+    private sealed record SnakeCaseSample(string FirstName, int TotalCount);
+
     [Fact]
     public void Serializes_Pascal_To_SnakeCase()
     {
-        var pascalPoco = BogusFactory.Create<TrendingMovieItem>();
-        var json = JsonSerializer.Serialize(pascalPoco, _configuredOpts);
+        var sample = new SnakeCaseSample("Dune", 42);
+        var json = JsonSerializer.Serialize(sample, _configuredOpts);
 
-        typeof(TrendingMovieItem).Properties().Count().Should().Be(7);
-        json.Should().Contain("\"name\"");
-        json.Should().Contain("\"title\"");
+        json.Should().Contain("\"first_name\":\"Dune\"");
+        json.Should().Contain("\"total_count\":42");
     }
 
     [Fact]
