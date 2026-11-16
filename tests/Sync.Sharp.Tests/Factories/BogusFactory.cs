@@ -46,34 +46,36 @@ public static class BogusFactory
         [typeof(IndexerConfigOpts)] = new FakerRegistration<IndexerConfigOpts>(CreateIndexerConfigOptsFaker()),
         [typeof(RsyncConfigOpts)] = new FakerRegistration<RsyncConfigOpts>(CreateRsyncConfigOptsFaker()),
         [typeof(SchedulingConfigOpts)] = new FakerRegistration<SchedulingConfigOpts>(CreateSchedulingConfigOptsFaker()),
+        [typeof(StorageConfigOpts)] = new FakerRegistration<StorageConfigOpts>(CreateStorageConfigOptsFaker()),
         [typeof(TrendingConfigOpts)] = new FakerRegistration<TrendingConfigOpts>(CreateTrendingConfigOptsFaker()),
         [typeof(VpnConfigOpts)] = new FakerRegistration<VpnConfigOpts>(CreateVpnConfigOptsFaker())
     };
 
     /// <summary>
-    /// Generates a single instance of <typeparamref name="T"/> when <paramref name="count"/> is 1,
-    /// or a <see cref="List{T}"/> containing <paramref name="count"/> instances when <paramref name="count"/> is greater than 1.
-    /// Collections can also be requested explicitly (e.g. <c>Create&lt;List&lt;T&gt;&gt;(count)</c> or <c>Create&lt;T[]&gt;(count)</c>).
+    /// Generates a single instance of <typeparamref name="T"/>, or a collection of instances when
+    /// <typeparamref name="T"/> is a supported collection type (<see cref="List{T}"/>, <see cref="IReadOnlyList{T}"/>,
+    /// or array).
     /// </summary>
     /// <typeparam name="T">The registered POCO type or collection of registered POCOs to create.</typeparam>
-    /// <param name="count">The number of instances to generate (defaults to 1).</param>
-    /// <remarks> throws NotSupportedException</remarks>
-    /// <returns>
-    /// A single instance of <typeparamref name="T"/> when <paramref name="count"/> is 1;
-    /// otherwise a <see cref="List{T}"/> of generated instances.
-    /// </returns>
-    public static dynamic Create<T>(int count = 1)
+    /// <param name="count">The number of instances to generate (defaults to 1; must be 1 for single POCO types).</param>
+    /// <returns>A populated fake instance or collection of <typeparamref name="T"/>.</returns>
+    public static T Create<T>(int count = 1)
     {
-        count = Math.Abs(count); //Ignore negatives.
+        count = Math.Abs(count); // Ignore negatives.
 
         var targetType = typeof(T);
 
         // Case 1: Direct POCO registration
         if (Registrations.TryGetValue(targetType, out var registration))
         {
-            return count > 1 ?
-                 registration.GenerateMany(count) :
-                 registration.GenerateOne();
+            if (count > 1)
+            {
+                throw new ArgumentException(
+                    $"Type '{targetType.Name}' is not a collection. To generate {count} instances, call BogusFactory.Create<List<{targetType.Name}>>({count}).",
+                    nameof(count));
+            }
+
+            return (T)registration.GenerateOne();
         }
 
         // Case 2: Array of registered type
@@ -82,7 +84,7 @@ public static class BogusFactory
             var elementType = targetType.GetElementType()!;
             if (Registrations.TryGetValue(elementType, out var arrayRegistration))
             {
-                return arrayRegistration.GenerateArray(count);
+                return (T)(object)arrayRegistration.GenerateArray(count);
             }
         }
 
@@ -92,7 +94,11 @@ public static class BogusFactory
             var genericArgs = targetType.GetGenericArguments();
             if (genericArgs.Length == 1 && Registrations.TryGetValue(genericArgs[0], out var collectionRegistration))
             {
-                return collectionRegistration.GenerateMany(count);
+                var list = collectionRegistration.GenerateMany(count);
+                if (targetType.IsAssignableFrom(list.GetType()))
+                {
+                    return (T)list;
+                }
             }
         }
 
@@ -181,10 +187,10 @@ public static class BogusFactory
                     Progress: f.Random.Double(0.0, 1.0),
                     Size: f.Random.Long(1_000_000_000, 8_000_000_000),
                     Ratio: f.Random.Double(0.0, 3.5),
-                    Seeding_Time: f.Random.Long(0, 86400),
+                    SeedingTime: f.Random.Long(0, 86400),
                     Category: category,
-                    Content_Path: $"/downloads/{category}/{name}",
-                    Save_Path: $"/downloads/{category}"
+                    ContentPath: $"/downloads/{category}/{name}",
+                    SavePath: $"/downloads/{category}"
                 );
             });
 
@@ -196,7 +202,7 @@ public static class BogusFactory
                 Size: f.Random.Long(500_000_000, 4_000_000_000),
                 Progress: f.Random.Double(0.0, 1.0),
                 Priority: 1,
-                Is_Seed: false
+                IsSeed: false
             ));
 
     private static Faker<MediaHistoryEntry> CreateMediaHistoryEntryFaker() =>
@@ -205,8 +211,8 @@ public static class BogusFactory
                 ExternalId: $"imdb:tt{f.Random.Number(1000000, 9999999)}",
                 InfoHash: f.Random.Hexadecimal(40, "").ToLowerInvariant(),
                 Title: f.Lorem.Sentence(3).TrimEnd('.'),
-                Category: f.PickRandom("movies", "tv"),
-                Status: f.PickRandom("grabbed", "synced"),
+                Category: f.PickRandom<MediaCategory>(),
+                Status: f.PickRandom<MediaSyncStatus>(),
                 CreatedAt: f.Date.RecentOffset(14),
                 SyncedAt: f.Random.Bool() ? f.Date.RecentOffset(7) : null
             ));
@@ -223,10 +229,10 @@ public static class BogusFactory
         new Faker<DiscoveryCandidate>()
             .CustomInstantiator(f =>
             {
-                var category = f.PickRandom("movies", "tv");
+                var category = f.PickRandom<MediaCategory>();
                 var query = f.Lorem.Word();
                 return new DiscoveryCandidate(
-                    ExternalId: $"custom:{category}:{query.ToLowerInvariant()}",
+                    ExternalId: $"custom:{category.ToNormalizedString()}:{query.ToLowerInvariant()}",
                     SearchQuery: query,
                     Category: category
                 );
@@ -236,9 +242,9 @@ public static class BogusFactory
         new Faker<TrendingMovieItem>()
             .CustomInstantiator(f => new TrendingMovieItem(
                 Title: f.Lorem.Sentence(2).TrimEnd('.'),
-                Name: null,
-                Imdb_Id: $"tt{f.Random.Number(1000000, 9999999)}",
-                Poster_Url: f.Internet.Url()
+                Name: f.Name.FullName(),
+                ImdbId: $"tt{f.Random.Number(1000000, 9999999)}",
+                PosterUrl: f.Internet.Url()
             ));
 
     private static Faker<TrendingTvItem> CreateTrendingTvItemFaker() =>
@@ -247,8 +253,8 @@ public static class BogusFactory
                 Title: f.Lorem.Sentence(2).TrimEnd('.'),
                 Name: null,
                 ShowName: null,
-                Imdb_Id: $"tt{f.Random.Number(1000000, 9999999)}",
-                Poster_Url: f.Internet.Url()
+                ImdbId: $"tt{f.Random.Number(1000000, 9999999)}",
+                PosterUrl: f.Internet.Url()
             ));
 
     private static Faker<CategoryFilterConfigOpts> CreateCategoryFilterConfigOptsFaker() =>
@@ -321,9 +327,15 @@ public static class BogusFactory
             {
                 IntervalMinutes = 15,
                 CronExpression = "*/15 * * * *",
-                LockFile = "/tmp/sync-sharp.lock",
                 WebhookPort = 8089,
-                WebhookSecretToken = f.Random.AlphaNumeric(16),
+                WebhookSecretToken = f.Random.AlphaNumeric(16)
+            });
+
+    private static Faker<StorageConfigOpts> CreateStorageConfigOptsFaker() =>
+        new Faker<StorageConfigOpts>()
+            .CustomInstantiator(_ => new StorageConfigOpts
+            {
+                LockFile = "/tmp/sync-sharp.lock",
                 StateFilePath = "/tmp/sync-sharp-state.json"
             });
 

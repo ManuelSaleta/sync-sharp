@@ -4,8 +4,8 @@ public sealed record MediaHistoryEntry(
     string? ExternalId,
     string InfoHash,
     string Title,
-    string Category,
-    string Status,
+    MediaCategory Category,
+    MediaSyncStatus Status,
     DateTimeOffset CreatedAt,
     DateTimeOffset? SyncedAt
 );

@@ -8,7 +8,12 @@ using Sync.Sharp.Models.Options;
 
 namespace Sync.Sharp.Services;
 
-public sealed class VpnGuardService(IOptions<VpnConfigOpts> options, ILogger<VpnGuardService> logger)
+public interface IVpnGuardService
+{
+    Task<bool> IsVpnConnectedAsync(CancellationToken ct);
+}
+
+public sealed class VpnGuardService(IOptions<VpnConfigOpts> options, ILogger<VpnGuardService> logger) : IVpnGuardService
 {
     private readonly VpnConfigOpts _options = options.Value ?? throw new ArgumentNullException(nameof(options));
 

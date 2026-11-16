@@ -7,48 +7,32 @@ public sealed record ProwlarrCategory(
     string? Name
 );
 
+/// <summary>
+/// Represents a release item returned by Prowlarr's search API.
+/// Prowlarr (*Arr stack) API contracts strictly return camelCase JSON keys.
+/// Explicit JsonPropertyName annotations are required for multi-word properties
+/// so they deserialize reliably when Sync.Sharp uses a global snake_case naming policy.
+/// </summary>
 public sealed record ProwlarrRelease(
     string Guid,
     string Title,
     long Size,
-    int IndexerId,
+    // Prowlarr API contract returns camelCase: "indexerId"
+    [property: JsonPropertyName("indexerId")] int IndexerId,
     string? Indexer,
-    string? InfoHash,
-    string? MagnetUrl,
-    string? DownloadUrl,
+    // Prowlarr API contract returns camelCase: "infoHash"
+    [property: JsonPropertyName("infoHash")] string? InfoHash,
+    // Prowlarr API contract returns camelCase: "magnetUrl"
+    [property: JsonPropertyName("magnetUrl")] string? MagnetUrl,
+    // Prowlarr API contract returns camelCase: "downloadUrl"
+    [property: JsonPropertyName("downloadUrl")] string? DownloadUrl,
     int? Seeders,
     int? Leechers,
-    DateTimeOffset PublishDate,
+    // Prowlarr API contract returns camelCase: "publishDate"
+    [property: JsonPropertyName("publishDate")] DateTimeOffset PublishDate,
     IReadOnlyList<ProwlarrCategory>? Categories
 )
 {
     public string? GetBestDownloadUri() =>
         !string.IsNullOrWhiteSpace(MagnetUrl) ? MagnetUrl : DownloadUrl;
-}
-
-public sealed record TrendingMovieItem(
-    string? Title,
-    string? Name,
-    string? Imdb_Id,
-    string? Poster_Url
-)
-{
-    public string EffectiveTitle => !string.IsNullOrWhiteSpace(Title) ? Title : (Name ?? string.Empty);
-    public string? ImdbId => Imdb_Id;
-    public string? PosterUrl => Poster_Url;
-}
-
-public sealed record TrendingTvItem(
-    string? Title = null,
-    string? Name = null,
-    [property: JsonPropertyName("show_name")] string? ShowName = null,
-    string? Imdb_Id = null,
-    string? Poster_Url = null
-)
-{
-    public string EffectiveTitle => !string.IsNullOrWhiteSpace(Title)
-        ? Title
-        : (!string.IsNullOrWhiteSpace(Name) ? Name : (ShowName ?? string.Empty));
-    public string? ImdbId => Imdb_Id;
-    public string? PosterUrl => Poster_Url;
 }

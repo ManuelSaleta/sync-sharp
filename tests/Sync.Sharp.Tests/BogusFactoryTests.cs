@@ -36,6 +36,45 @@ public class BogusFactoryTests
     }
 
     [Fact]
+    public void Create_TrendingItems_ShouldReturnPopulatedInstances()
+    {
+        TrendingMovieItem movie = BogusFactory.Create<TrendingMovieItem>();
+        movie.Should().NotBeNull();
+        movie.EffectiveTitle.Should().NotBeNullOrWhiteSpace();
+        movie.ImdbId.Should().StartWith("tt");
+        movie.PosterUrl.Should().StartWith("http");
+        movie.Category.Should().Be(MediaCategory.Movies);
+
+        TrendingTvItem tv = BogusFactory.Create<TrendingTvItem>();
+        tv.Should().NotBeNull();
+        tv.EffectiveTitle.Should().NotBeNullOrWhiteSpace();
+        tv.ImdbId.Should().StartWith("tt");
+        tv.PosterUrl.Should().StartWith("http");
+        tv.Category.Should().Be(MediaCategory.Tv);
+    }
+
+    [Fact]
+    public void Create_MediaHistoryEntry_ShouldReturnPopulatedInstance()
+    {
+        MediaHistoryEntry entry = BogusFactory.Create<MediaHistoryEntry>();
+        entry.Should().NotBeNull();
+        entry.InfoHash.Should().HaveLength(40);
+        entry.Title.Should().NotBeNullOrWhiteSpace();
+        Enum.IsDefined(typeof(MediaCategory), entry.Category).Should().BeTrue();
+        Enum.IsDefined(typeof(MediaSyncStatus), entry.Status).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Create_DiscoveryCandidate_ShouldReturnPopulatedInstance()
+    {
+        DiscoveryCandidate candidate = BogusFactory.Create<DiscoveryCandidate>();
+        candidate.Should().NotBeNull();
+        candidate.ExternalId.Should().NotBeNullOrWhiteSpace();
+        candidate.SearchQuery.Should().NotBeNullOrWhiteSpace();
+        Enum.IsDefined(typeof(MediaCategory), candidate.Category).Should().BeTrue();
+    }
+
+    [Fact]
     public void Create_ProwlarrRelease_ShouldReturnValidRelease()
     {
         ProwlarrRelease release = BogusFactory.Create<ProwlarrRelease>();
@@ -120,23 +159,23 @@ public class BogusFactoryTests
     }
 
     [Fact]
-    public void Create_WithCountGreaterThanOne_ShouldInferAndReturnList()
+    public void Create_WithCountGreaterThanOneOnNonCollection_ShouldThrowArgumentException()
     {
-        // When requesting a POCO with count > 1, a List<T> should be inferred and returned
-        List<QBitTorrentFileItem> files = BogusFactory.Create<QBitTorrentFileItem>(5);
+        var action = () => BogusFactory.Create<QBitTorrentFileItem>(5);
 
-        files.Should().NotBeNull();
-        files.Should().HaveCount(5);
-        files.All(f => f.Size > 0).Should().BeTrue();
+        action.Should().Throw<ArgumentException>()
+            .WithMessage("*not a collection*");
     }
 
     [Fact]
-    public void Create_WithCountGreaterThanOne_UsingVar_ShouldYieldListInstance()
+    public void Create_WithGenericCollectionType_UsingVar_ShouldYieldStronglyTypedList()
     {
-        var files = BogusFactory.Create<QBitTorrentFileItem>(5);
+        var files = BogusFactory.Create<List<QBitTorrentFileItem>>(5);
 
-        ((object)files).Should().BeOfType<List<QBitTorrentFileItem>>();
-        ((List<QBitTorrentFileItem>)files).Should().HaveCount(5);
+        files.Should().NotBeNull();
+        files.Should().BeOfType<List<QBitTorrentFileItem>>();
+        files.Should().HaveCount(5);
+        files.All(f => f.Size > 0).Should().BeTrue();
     }
 
     [Fact]

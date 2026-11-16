@@ -47,7 +47,7 @@ public class ProwlarrAndQBitClientTests
             ApiKey = "valid-key",
             MinSeeders = 50
         });
-        var jsonOpts = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var jsonOpts = new JsonSerializerOptions(JsonSerializerDefaults.Web) { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
         var client = new ProwlarrClient(httpClient, indexerOpts, jsonOpts, NullLogger<ProwlarrClient>.Instance);
 
         var filter = new CategoryFilterConfigOpts
@@ -102,12 +102,105 @@ public class ProwlarrAndQBitClientTests
             Password = "secret",
             StagingDir = "/downloads"
         });
-        var jsonOpts = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var jsonOpts = new JsonSerializerOptions(JsonSerializerDefaults.Web) { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
         var client = new QBitClient(httpClient, downloaderOpts, jsonOpts, NullLogger<QBitClient>.Instance);
 
         var passed = await client.AuditAndQuarantineTorrentAsync("badhash123", CancellationToken.None);
 
         passed.Should().BeFalse();
         deletedTorrent.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task QBitClient_ShouldReauthenticateAndRetry_WhenSessionExpiresWith403()
+    {
+        var loginCount = 0;
+        var infoCalls = 0;
+        var handler = new MockHttpMessageHandler(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            if (path.EndsWith("/api/v2/auth/login"))
+            {
+                loginCount++;
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("Ok.") };
+            }
+            if (path.EndsWith("/api/v2/torrents/info"))
+            {
+                infoCalls++;
+                if (infoCalls == 1)
+                {
+                    return new HttpResponseMessage(HttpStatusCode.Forbidden);
+                }
+
+                return MockHttpMessageHandler.JsonResponse("[]");
+            }
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+
+        var httpClient = new HttpClient(handler);
+        var downloaderOpts = Options.Create(new DownloaderConfigOpts
+        {
+            BaseUrl = "http://127.0.0.1:8080",
+            Username = "admin",
+            Password = "secret",
+            StagingDir = "/downloads"
+        });
+        var jsonOpts = new JsonSerializerOptions(JsonSerializerDefaults.Web) { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+        var client = new QBitClient(httpClient, downloaderOpts, jsonOpts, NullLogger<QBitClient>.Instance);
+
+        var completed = await client.GetCompletedTorrentsAsync(CancellationToken.None);
+
+        completed.Should().BeEmpty();
+        loginCount.Should().Be(2);
+        infoCalls.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task QBitClient_AuditAndQuarantine_DoesNotResumeWhenSetFilePrioritiesFails()
+    {
+        var resumed = false;
+        var handler = new MockHttpMessageHandler(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            if (path.EndsWith("/api/v2/auth/login"))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("Ok.") };
+            }
+            if (path.EndsWith("/api/v2/torrents/files"))
+            {
+                return MockHttpMessageHandler.JsonResponse("""
+                [
+                  { "index": 0, "name": "Movie.2026.1080p.mkv", "size": 2000000000, "progress": 0, "priority": 1 },
+                  { "index": 1, "name": "readme.txt", "size": 512, "progress": 0, "priority": 1 }
+                ]
+                """);
+            }
+            if (path.EndsWith("/api/v2/torrents/filePrio"))
+            {
+                return new HttpResponseMessage(HttpStatusCode.InternalServerError);
+            }
+            if (path.EndsWith("/api/v2/torrents/start") || path.EndsWith("/api/v2/torrents/resume"))
+            {
+                resumed = true;
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            }
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+
+        var httpClient = new HttpClient(handler);
+        var downloaderOpts = Options.Create(new DownloaderConfigOpts
+        {
+            BaseUrl = "http://127.0.0.1:8080",
+            Username = "admin",
+            Password = "secret",
+            StagingDir = "/downloads"
+        });
+        var jsonOpts = new JsonSerializerOptions(JsonSerializerDefaults.Web) { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+        var client = new QBitClient(httpClient, downloaderOpts, jsonOpts, NullLogger<QBitClient>.Instance);
+
+        var passed = await client.AuditAndQuarantineTorrentAsync("hash123", CancellationToken.None);
+
+        passed.Should().BeFalse();
+        resumed.Should().BeFalse();
     }
 }

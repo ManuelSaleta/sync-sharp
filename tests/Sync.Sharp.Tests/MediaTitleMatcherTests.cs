@@ -1,4 +1,5 @@
 using Plex.Core.Http.Models;
+using Sync.Sharp.Models;
 using Sync.Sharp.Services;
 
 namespace Sync.Sharp.Tests;
@@ -29,7 +30,7 @@ public class MediaTitleMatcherTests
 
         var matched = MediaTitleMatcher.IsMatch(
             "The.Matrix.1999.1080p.BluRay.x264",
-            "movies",
+            MediaCategory.Movies,
             item);
 
         matched.Should().BeTrue();
@@ -46,7 +47,7 @@ public class MediaTitleMatcherTests
 
         var matched = MediaTitleMatcher.IsMatch(
             "Total.Recall.2012.1080p.BluRay.x264",
-            "movies",
+            MediaCategory.Movies,
             item);
 
         matched.Should().BeFalse();
@@ -63,7 +64,7 @@ public class MediaTitleMatcherTests
 
         var matched = MediaTitleMatcher.IsMatch(
             "Spiderman 2002 1080p WEBRip",
-            "movies",
+            MediaCategory.Movies,
             item);
 
         matched.Should().BeTrue();

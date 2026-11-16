@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Sync.Sharp.Models.Options;
 
 public sealed class DownloaderConfigOpts
@@ -12,6 +14,8 @@ public sealed class DownloaderConfigOpts
     /// <summary>
     /// Base HTTP URL for the download client WebUI API.
     /// </summary>
+    [Required(AllowEmptyStrings = false)]
+    [Url]
     public string BaseUrl { get; set; } = string.Empty;
 
     /// <summary>
@@ -27,6 +31,7 @@ public sealed class DownloaderConfigOpts
     /// <summary>
     /// Download staging directory path where completed torrent payloads are stored.
     /// </summary>
+    [Required(AllowEmptyStrings = false)]
     public string StagingDir { get; set; } = string.Empty;
 
     /// <summary>
@@ -37,10 +42,12 @@ public sealed class DownloaderConfigOpts
     /// <summary>
     /// Upload ratio threshold at which seeding is considered complete.
     /// </summary>
+    [Range(0.0, double.MaxValue)]
     public double RatioLimit { get; set; }
 
     /// <summary>
     /// Maximum seeding duration in minutes before torrents are considered eligible for cleanup/sync.
     /// </summary>
+    [Range(0, int.MaxValue)]
     public int SeedingTimeLimitMinutes { get; set; }
 }

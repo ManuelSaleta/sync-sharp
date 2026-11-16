@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Sync.Sharp.Models.Options;
 
 public sealed class IndexerConfigOpts
@@ -12,6 +14,8 @@ public sealed class IndexerConfigOpts
     /// <summary>
     /// Base HTTP URL for the indexer service API endpoint.
     /// </summary>
+    [Required(AllowEmptyStrings = false)]
+    [Url]
     public string BaseUrl { get; set; } = string.Empty;
 
     /// <summary>
@@ -22,10 +26,12 @@ public sealed class IndexerConfigOpts
     /// <summary>
     /// Minimum required seeder count for a release candidate to be considered viable.
     /// </summary>
+    [Range(0, int.MaxValue)]
     public int MinSeeders { get; set; }
 
     /// <summary>
     /// Maximum number of candidate releases to grab and dispatch per orchestrator execution cycle.
     /// </summary>
+    [Range(0, int.MaxValue)]
     public int MaxGrabPerRun { get; set; }
 }

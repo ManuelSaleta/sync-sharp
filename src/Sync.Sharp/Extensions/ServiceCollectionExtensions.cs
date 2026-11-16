@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Plex.Core.Http;
@@ -84,25 +85,44 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configuration);
 
         services.AddOptions<SchedulingConfigOpts>()
-            .Bind(configuration.GetSection(SchedulingConfigOpts.SectionName));
+            .Bind(configuration.GetSection(SchedulingConfigOpts.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        services.AddOptions<StorageConfigOpts>()
+            .Bind(configuration.GetSection(StorageConfigOpts.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
 
         services.AddOptions<VpnConfigOpts>()
-            .Bind(configuration.GetSection(VpnConfigOpts.SectionName));
+            .Bind(configuration.GetSection(VpnConfigOpts.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
 
         services.AddOptions<TrendingConfigOpts>()
-            .Bind(configuration.GetSection(TrendingConfigOpts.SectionName));
+            .Bind(configuration.GetSection(TrendingConfigOpts.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
 
         services.AddOptions<IndexerConfigOpts>()
-            .Bind(configuration.GetSection(IndexerConfigOpts.SectionName));
+            .Bind(configuration.GetSection(IndexerConfigOpts.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
 
         services.AddOptions<FiltersConfigOpts>()
-            .Bind(configuration.GetSection(FiltersConfigOpts.SectionName));
+            .Bind(configuration.GetSection(FiltersConfigOpts.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
 
         services.AddOptions<DownloaderConfigOpts>()
-            .Bind(configuration.GetSection(DownloaderConfigOpts.SectionName));
+            .Bind(configuration.GetSection(DownloaderConfigOpts.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
 
         services.AddOptions<RsyncConfigOpts>()
-            .Bind(configuration.GetSection(RsyncConfigOpts.SectionName));
+            .Bind(configuration.GetSection(RsyncConfigOpts.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
 
         services.AddOptions<PlexClientOptions>()
             .Bind(configuration.GetSection("PlexClientOptions"));
@@ -113,19 +133,32 @@ public static class ServiceCollectionExtensions
             PlexClient.DefaultJsonOptions.Converters.Add(flexibleStringConverter);
         }
 
-        var jsonSerializerOptions = new JsonSerializerOptions
+        var jsonSerializerOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            DictionaryKeyPolicy = JsonNamingPolicy.SnakeCaseLower,
             PropertyNameCaseInsensitive = true,
             ReadCommentHandling = JsonCommentHandling.Skip,
             AllowTrailingCommas = true,
             WriteIndented = true,
-            Converters = { flexibleStringConverter }
+            Converters =
+            {
+                flexibleStringConverter,
+                new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower)
+            }
         };
         services.AddSingleton(jsonSerializerOptions);
 
         services.AddSingleton<VpnGuardService>();
+        services.AddSingleton<IVpnGuardService>(sp => sp.GetRequiredService<VpnGuardService>());
         services.AddSingleton<JsonStateStore>();
+        services.AddSingleton<IStateStore>(sp => sp.GetRequiredService<JsonStateStore>());
+        services.AddSingleton<ITorrentSecurityAuditor, TorrentSecurityAuditor>();
+        services.AddSingleton<IReleaseScorer, ReleaseScorer>();
+        services.AddSingleton<IMediaValidator, MediaValidator>();
+        services.AddSingleton<IStagingPathResolver, StagingPathResolver>();
+        services.AddSingleton<IRsyncTransferClient, RsyncTransferClient>();
+        services.AddSingleton<IStagingCleaner, StagingCleaner>();
 
         services.AddPlexClient(options =>
         {
@@ -154,11 +187,13 @@ public static class ServiceCollectionExtensions
         {
             AutomaticDecompression = DecompressionMethods.All
         });
+        services.AddTransient<ITrendingFeedClient>(sp => sp.GetRequiredService<TrendingFeedClient>());
 
         services.AddHttpClient<ProwlarrClient>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(30);
         });
+        services.AddTransient<IProwlarrClient>(sp => sp.GetRequiredService<ProwlarrClient>());
 
         services.AddHttpClient<QBitClient>(client =>
         {
@@ -168,8 +203,10 @@ public static class ServiceCollectionExtensions
             UseCookies = true,
             CookieContainer = new CookieContainer()
         });
+        services.AddTransient<IQBitClient>(sp => sp.GetRequiredService<QBitClient>());
 
         services.AddSingleton<MediaTransferService>();
+        services.AddSingleton<IMediaTransferService>(sp => sp.GetRequiredService<MediaTransferService>());
         services.AddSingleton<MediaPollingService>();
         services.AddSingleton<IMediaPollingService>(sp => sp.GetRequiredService<MediaPollingService>());
         services.AddScoped<SyncOrchestrator>();
