@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Sync.Sharp.Models.Options;
 
 public sealed class CategoryFilterConfigOpts
@@ -10,11 +12,13 @@ public sealed class CategoryFilterConfigOpts
     /// <summary>
     /// Minimum allowable payload size in megabytes for candidate torrent releases.
     /// </summary>
+    [Range(0, long.MaxValue)]
     public long MinSizeMb { get; set; }
 
     /// <summary>
     /// Maximum allowable payload size in megabytes for candidate torrent releases.
     /// </summary>
+    [Range(0, long.MaxValue)]
     public long MaxSizeMb { get; set; }
 
     /// <summary>

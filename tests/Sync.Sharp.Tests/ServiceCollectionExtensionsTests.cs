@@ -42,10 +42,19 @@ public class ServiceCollectionExtensionsTests
         provider.GetService<IPlexClient>().Should().NotBeNull();
         provider.GetService<IMediaPollingService>().Should().NotBeNull();
         provider.GetService<VpnGuardService>().Should().NotBeNull();
+        provider.GetService<IVpnGuardService>().Should().NotBeNull();
         provider.GetService<JsonStateStore>().Should().NotBeNull();
+        provider.GetService<IStateStore>().Should().NotBeNull();
+        provider.GetService<ITrendingFeedClient>().Should().NotBeNull();
         provider.GetService<ProwlarrClient>().Should().NotBeNull();
+        provider.GetService<IProwlarrClient>().Should().NotBeNull();
         provider.GetService<QBitClient>().Should().NotBeNull();
+        provider.GetService<IQBitClient>().Should().NotBeNull();
+        provider.GetService<ITorrentSecurityAuditor>().Should().NotBeNull();
         provider.GetService<MediaTransferService>().Should().NotBeNull();
+        provider.GetService<IMediaTransferService>().Should().NotBeNull();
+        provider.GetService<IMediaValidator>().Should().NotBeNull();
+        provider.GetService<IStagingPathResolver>().Should().NotBeNull();
 
         using var scope = provider.CreateScope();
         scope.ServiceProvider.GetService<SyncOrchestrator>().Should().NotBeNull();
@@ -66,5 +75,22 @@ public class ServiceCollectionExtensionsTests
         JsonSerializer.Deserialize<string>("65592", options).Should().Be("65592");
         JsonSerializer.Deserialize<string>("true", options).Should().Be("true");
         JsonSerializer.Deserialize<string>("\"hello\"", options).Should().Be("hello");
+    }
+
+    [Fact]
+    public void AddSyncSharp_WithInvalidOptions_ShouldThrowOptionsValidationException()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>())
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSyncSharp(configuration, addHostedWorker: false);
+
+        using var provider = services.BuildServiceProvider();
+        var action = () => provider.GetRequiredService<IOptions<IndexerConfigOpts>>().Value;
+
+        action.Should().Throw<OptionsValidationException>();
     }
 }

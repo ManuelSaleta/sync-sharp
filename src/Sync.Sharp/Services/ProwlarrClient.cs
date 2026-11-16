@@ -9,11 +9,17 @@ using Sync.Sharp.Models.Options;
 
 namespace Sync.Sharp.Services;
 
+public interface IProwlarrClient
+{
+    bool IsConfigured { get; }
+    Task<ProwlarrRelease?> SearchBestReleaseAsync(string query, CategoryFilterConfigOpts filter, CancellationToken ct);
+}
+
 public sealed class ProwlarrClient(
     HttpClient httpClient,
     IOptions<IndexerConfigOpts> indexerOptions,
     JsonSerializerOptions jsonOptions,
-    ILogger<ProwlarrClient> logger)
+    ILogger<ProwlarrClient> logger) : IProwlarrClient
 {
     private static readonly ConcurrentDictionary<string, Regex> RegexCache = new(StringComparer.Ordinal);
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);

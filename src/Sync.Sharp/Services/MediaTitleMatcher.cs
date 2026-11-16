@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text.RegularExpressions;
 using Plex.Core.Http.Models;
 using Sync.Sharp.Models;
@@ -10,29 +11,28 @@ namespace Sync.Sharp.Services;
 /// </summary>
 public static partial class MediaTitleMatcher
 {
-    private static readonly Regex YearRegex = new(
-        @"\b(19\d\d|20\d\d)\b",
-        RegexOptions.Compiled);
+    private const int StackAllocThreshold = 256;
 
-    private static readonly Regex TvSeasonEpisodeRegex = new(
-        @"\b(s\d{1,2}(?:e\d{1,2})?|season\s*\d{1,2}|complete\s+season\s*\d{1,2}|series)\b.*",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    [GeneratedRegex(@"\b(19\d\d|20\d\d)\b")]
+    private static partial Regex YearRegex();
 
-    private static readonly Regex SceneTagsRegex = new(
-        @"\b(1080p|720p|2160p|4k|uhd|bluray|blu-ray|brrip|bdrip|webrip|web-dl|web|h264|x264|h265|x265|hevc|av1|xvid|divx|10bit|10bits|remux|repack|proper|unrated|extended|directors\.cut|dual\.audio|multi|aac\d?\.?\d?|ac3|eac3|dts(-hd)?|truehd|atmos|ddp\d?\.?\d?|telesync|hdts|hdtc|cam|camrip|yify|yts(\.[a-z0-9]+)?|rarbg|galaxyrg|amzn|dsnp|nf|hulu|max)\b.*",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    [GeneratedRegex(@"\b(s\d{1,2}(?:e\d{1,2})?|season\s*\d{1,2}|complete\s+season\s*\d{1,2}|series)\b.*", RegexOptions.IgnoreCase)]
+    private static partial Regex TvSeasonEpisodeRegex();
 
-    private static readonly Regex FileExtensionRegex = new(
-        @"\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|ts)$",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    [GeneratedRegex(@"\b(1080p|720p|2160p|4k|uhd|bluray|blu-ray|brrip|bdrip|webrip|web-dl|web|h264|x264|h265|x265|hevc|av1|xvid|divx|10bit|10bits|remux|repack|proper|unrated|extended|directors\.cut|dual\.audio|multi|aac\d?\.?\d?|ac3|eac3|dts(-hd)?|truehd|atmos|ddp\d?\.?\d?|telesync|hdts|hdtc|cam|camrip|yify|yts(\.[a-z0-9]+)?|rarbg|galaxyrg|amzn|dsnp|nf|hulu|max)\b.*", RegexOptions.IgnoreCase)]
+    private static partial Regex SceneTagsRegex();
 
-    private static readonly Regex PunctuationRegex = new(
-        @"[^\w\s]",
-        RegexOptions.Compiled);
+    [GeneratedRegex(@"\.(mp4|mkv|avi|mov|wmv|flv|webm|m4v|ts)$", RegexOptions.IgnoreCase)]
+    private static partial Regex FileExtensionRegex();
 
-    private static readonly Regex WhitespaceRegex = new(
-        @"\s+",
-        RegexOptions.Compiled);
+    [GeneratedRegex(@"[^\w\s]")]
+    private static partial Regex PunctuationRegex();
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex WhitespaceRegex();
+
+    [GeneratedRegex(@"\[.*?\]|\(.*?\)")]
+    private static partial Regex BracketedContentRegex();
 
     private static readonly HashSet<string> StopWords = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -52,11 +52,11 @@ public static partial class MediaTitleMatcher
         var text = raw;
 
         // Strip file extensions
-        text = FileExtensionRegex.Replace(text, string.Empty);
+        text = FileExtensionRegex().Replace(text, string.Empty);
 
         // Extract 4-digit year if present
         int? extractedYear = null;
-        var yearMatches = YearRegex.Matches(text);
+        var yearMatches = YearRegex().Matches(text);
         if (yearMatches.Count > 0)
         {
             // Take the last 4-digit number that looks like a valid release year (e.g. 1950 - 2035)
@@ -79,17 +79,18 @@ public static partial class MediaTitleMatcher
         // If a release year was identified, strip it from the title text to isolate title words
         if (extractedYear.HasValue)
         {
-            text = Regex.Replace(text, $@"\b{extractedYear.Value}\b", " ");
+            var yearStr = extractedYear.Value.ToString();
+            text = YearRegex().Replace(text, m => m.Value == yearStr ? " " : m.Value);
         }
 
         // Strip TV season/episode markers (e.g. S01E01, Season 1)
-        text = TvSeasonEpisodeRegex.Replace(text, string.Empty);
+        text = TvSeasonEpisodeRegex().Replace(text, string.Empty);
 
         // Strip scene tags, resolutions, codecs
-        text = SceneTagsRegex.Replace(text, string.Empty);
+        text = SceneTagsRegex().Replace(text, string.Empty);
 
         // Strip any bracketed content left (e.g. [YTS], (2026))
-        text = Regex.Replace(text, @"\[.*?\]|\(.*?\)", " ");
+        text = BracketedContentRegex().Replace(text, " ");
 
         // Normalize string
         var cleanTitle = Normalize(text);
@@ -111,10 +112,10 @@ public static partial class MediaTitleMatcher
         var s = title.ToLowerInvariant();
 
         // Replace punctuation with space
-        s = PunctuationRegex.Replace(s, " ");
+        s = PunctuationRegex().Replace(s, " ");
 
         // Collapse whitespace
-        s = WhitespaceRegex.Replace(s, " ").Trim();
+        s = WhitespaceRegex().Replace(s, " ").Trim();
 
         // Strip leading articles
         if (s.StartsWith("the ", StringComparison.Ordinal)) s = s[4..];
@@ -232,27 +233,57 @@ public static partial class MediaTitleMatcher
         return false;
     }
 
-    private static int ComputeLevenshteinDistance(string s, string t)
+    private static int ComputeLevenshteinDistance(ReadOnlySpan<char> s, ReadOnlySpan<char> t)
     {
-        if (string.IsNullOrEmpty(s)) return t?.Length ?? 0;
-        if (string.IsNullOrEmpty(t)) return s.Length;
+        if (s.IsEmpty) return t.Length;
+        if (t.IsEmpty) return s.Length;
 
-        var d = new int[s.Length + 1, t.Length + 1];
-
-        for (var i = 0; i <= s.Length; i++) d[i, 0] = i;
-        for (var j = 0; j <= t.Length; j++) d[0, j] = j;
-
-        for (var j = 1; j <= t.Length; j++)
+        // Ensure s is the shorter span so the DP row uses minimal memory
+        if (s.Length > t.Length)
         {
-            for (var i = 1; i <= s.Length; i++)
-            {
-                var cost = s[i - 1] == t[j - 1] ? 0 : 1;
-                d[i, j] = Math.Min(
-                    Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1),
-                    d[i - 1, j - 1] + cost);
-            }
+            var tmp = s;
+            s = t;
+            t = tmp;
         }
 
-        return d[s.Length, t.Length];
+        var rowLength = s.Length + 1;
+        int[]? rented = null;
+        Span<int> row = rowLength <= StackAllocThreshold
+            ? stackalloc int[rowLength]
+            : (rented = ArrayPool<int>.Shared.Rent(rowLength)).AsSpan(0, rowLength);
+
+        try
+        {
+            for (var i = 0; i <= s.Length; i++)
+            {
+                row[i] = i;
+            }
+
+            for (var j = 1; j <= t.Length; j++)
+            {
+                var prevDiagonal = row[0];
+                row[0] = j;
+                var tj = t[j - 1];
+
+                for (var i = 1; i <= s.Length; i++)
+                {
+                    var oldDiagonal = row[i];
+                    var cost = s[i - 1] == tj ? 0 : 1;
+                    row[i] = Math.Min(
+                        Math.Min(row[i] + 1, row[i - 1] + 1),
+                        prevDiagonal + cost);
+                    prevDiagonal = oldDiagonal;
+                }
+            }
+
+            return row[s.Length];
+        }
+        finally
+        {
+            if (rented is not null)
+            {
+                ArrayPool<int>.Shared.Return(rented);
+            }
+        }
     }
 }

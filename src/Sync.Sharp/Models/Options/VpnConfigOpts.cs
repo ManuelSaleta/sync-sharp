@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Sync.Sharp.Models.Options;
 
 public sealed class VpnConfigOpts
@@ -12,6 +14,7 @@ public sealed class VpnConfigOpts
     /// <summary>
     /// The default virtual network interface created by the WireGuard VPN protocol.
     /// </summary>
+    [Required(AllowEmptyStrings = false)]
     public string RequiredInterface { get; set; } = string.Empty;
 
     /// <summary>

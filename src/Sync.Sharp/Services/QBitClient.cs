@@ -3,20 +3,38 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Sync.Sharp.Models;
 using Sync.Sharp.Models.Options;
 
 namespace Sync.Sharp.Services;
 
+public interface IQBitClient
+{
+    bool IsConfigured { get; }
+    Task<bool> EnsureAuthenticatedAsync(CancellationToken ct);
+    Task<bool> AddTorrentAsync(string downloadUri, MediaCategory category, CancellationToken ct);
+    Task<bool> AddTorrentAsync(string downloadUri, string category, CancellationToken ct);
+    Task<bool> AddTorrentQuarantinedAsync(string downloadUri, MediaCategory category, CancellationToken ct);
+    Task<bool> AddTorrentQuarantinedAsync(string downloadUri, string category, CancellationToken ct);
+    Task<bool> AuditAndQuarantineTorrentAsync(string hash, CancellationToken ct);
+    Task AuditPendingQuarantinedTorrentsAsync(CancellationToken ct);
+    Task<IReadOnlyList<QBitTorrentItem>> GetCompletedTorrentsAsync(CancellationToken ct);
+    Task<bool> DeleteTorrentAsync(string hash, bool deleteFiles, CancellationToken ct);
+    Task PauseAllAsync(CancellationToken ct);
+}
+
 public sealed class QBitClient(
     HttpClient httpClient,
     IOptions<DownloaderConfigOpts> downloaderOptions,
     JsonSerializerOptions jsonOptions,
-    ILogger<QBitClient> logger)
+    ILogger<QBitClient> logger,
+    ITorrentSecurityAuditor? securityAuditor = null) : IQBitClient
 {
     private readonly DownloaderConfigOpts _config = downloaderOptions?.Value ?? throw new ArgumentNullException(nameof(downloaderOptions));
     private readonly JsonSerializerOptions _jsonOptions = jsonOptions ?? throw new ArgumentNullException(nameof(jsonOptions));
+    private readonly ITorrentSecurityAuditor _securityAuditor = securityAuditor ?? new TorrentSecurityAuditor(NullLogger<TorrentSecurityAuditor>.Instance);
     private bool _authenticated;
 
     public bool IsConfigured =>
@@ -65,6 +83,48 @@ public sealed class QBitClient(
         return false;
     }
 
+    private async Task<HttpResponseMessage?> SendWithReauthAsync(
+        Func<HttpRequestMessage> requestFactory,
+        CancellationToken ct)
+    {
+        if (!await EnsureAuthenticatedAsync(ct))
+        {
+            return null;
+        }
+
+        using var req = requestFactory();
+        var resp = await httpClient.SendAsync(req, ct);
+
+        if (resp.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            resp.Dispose();
+            _authenticated = false;
+            logger.LogDebug("qBittorrent session expired (HTTP {Status}); re-authenticating...", resp.StatusCode);
+
+            if (!await EnsureAuthenticatedAsync(ct))
+            {
+                return null;
+            }
+
+            using var retryReq = requestFactory();
+            resp = await httpClient.SendAsync(retryReq, ct);
+        }
+
+        return resp;
+    }
+
+    private async Task<T?> GetJsonWithReauthAsync<T>(string url, CancellationToken ct)
+    {
+        using var resp = await SendWithReauthAsync(() => new HttpRequestMessage(HttpMethod.Get, url), ct);
+        if (resp is null)
+        {
+            return default;
+        }
+
+        resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadFromJsonAsync<T>(_jsonOptions, ct);
+    }
+
     public static readonly string[] BlacklistedDangerousExtensions =
     [
         // Executables & script droppers
@@ -101,25 +161,28 @@ public sealed class QBitClient(
 
     public async Task<bool> AddTorrentQuarantinedAsync(string downloadUri, string category, CancellationToken ct)
     {
-        if (!await EnsureAuthenticatedAsync(ct))
-        {
-            return false;
-        }
-
         var clientBaseDir = !string.IsNullOrWhiteSpace(_config.RemotePathPrefix)
             ? _config.RemotePathPrefix
             : _config.StagingDir;
         var savePath = Path.Combine(clientBaseDir, category);
-        using var form = new FormUrlEncodedContent([
-            new KeyValuePair<string, string>("urls", downloadUri),
-            new KeyValuePair<string, string>("category", category),
-            new KeyValuePair<string, string>("savepath", savePath),
-            new KeyValuePair<string, string>("paused", "true"),
-            new KeyValuePair<string, string>("ratioLimit", _config.RatioLimit.ToString(CultureInfo.InvariantCulture)),
-            new KeyValuePair<string, string>("seedingTimeLimit", _config.SeedingTimeLimitMinutes.ToString(CultureInfo.InvariantCulture))
-        ]);
 
-        using var resp = await httpClient.PostAsync($"{BaseUrl}/api/v2/torrents/add", form, ct);
+        using var resp = await SendWithReauthAsync(() => new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/api/v2/torrents/add")
+        {
+            Content = new FormUrlEncodedContent([
+                new KeyValuePair<string, string>("urls", downloadUri),
+                new KeyValuePair<string, string>("category", category),
+                new KeyValuePair<string, string>("savepath", savePath),
+                new KeyValuePair<string, string>("paused", "true"),
+                new KeyValuePair<string, string>("ratioLimit", _config.RatioLimit.ToString(CultureInfo.InvariantCulture)),
+                new KeyValuePair<string, string>("seedingTimeLimit", _config.SeedingTimeLimitMinutes.ToString(CultureInfo.InvariantCulture))
+            ])
+        }, ct);
+
+        if (resp is null)
+        {
+            return false;
+        }
+
         if (!resp.IsSuccessStatusCode)
         {
             logger.LogError("Failed to add quarantined torrent to qBittorrent (HTTP {Status}).", resp.StatusCode);
@@ -132,16 +195,10 @@ public sealed class QBitClient(
 
     public async Task<IReadOnlyList<QBitTorrentFileItem>> GetTorrentFilesAsync(string hash, CancellationToken ct)
     {
-        if (!await EnsureAuthenticatedAsync(ct))
-        {
-            return [];
-        }
-
         try
         {
-            var files = await httpClient.GetFromJsonAsync<List<QBitTorrentFileItem>>(
+            var files = await GetJsonWithReauthAsync<List<QBitTorrentFileItem>>(
                 $"{BaseUrl}/api/v2/torrents/files?hash={hash}",
-                _jsonOptions,
                 ct);
 
             return files ?? [];
@@ -155,47 +212,44 @@ public sealed class QBitClient(
 
     public async Task<bool> SetFilePrioritiesAsync(string hash, IEnumerable<int> fileIndices, int priority, CancellationToken ct)
     {
-        if (!await EnsureAuthenticatedAsync(ct))
-        {
-            return false;
-        }
-
         var idList = string.Join("|", fileIndices);
         if (string.IsNullOrWhiteSpace(idList))
         {
             return true;
         }
 
-        using var form = new FormUrlEncodedContent([
-            new KeyValuePair<string, string>("hash", hash),
-            new KeyValuePair<string, string>("id", idList),
-            new KeyValuePair<string, string>("priority", priority.ToString(CultureInfo.InvariantCulture))
-        ]);
+        using var resp = await SendWithReauthAsync(() => new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/api/v2/torrents/filePrio")
+        {
+            Content = new FormUrlEncodedContent([
+                new KeyValuePair<string, string>("hash", hash),
+                new KeyValuePair<string, string>("id", idList),
+                new KeyValuePair<string, string>("priority", priority.ToString(CultureInfo.InvariantCulture))
+            ])
+        }, ct);
 
-        using var resp = await httpClient.PostAsync($"{BaseUrl}/api/v2/torrents/filePrio", form, ct);
-        return resp.IsSuccessStatusCode;
+        return resp is { IsSuccessStatusCode: true };
     }
 
     public async Task<bool> ResumeTorrentAsync(string hash, CancellationToken ct)
     {
-        if (!await EnsureAuthenticatedAsync(ct))
+        // qBittorrent v5.0+ uses /api/v2/torrents/start; v4.x uses /api/v2/torrents/resume
+        using var startResp = await SendWithReauthAsync(() => new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/api/v2/torrents/start")
+        {
+            Content = new FormUrlEncodedContent([new KeyValuePair<string, string>("hashes", hash)])
+        }, ct);
+
+        if (startResp is null)
         {
             return false;
         }
 
-        using var form = new FormUrlEncodedContent([
-            new KeyValuePair<string, string>("hashes", hash)
-        ]);
-
-        // qBittorrent v5.0+ uses /api/v2/torrents/start; v4.x uses /api/v2/torrents/resume
-        using var startResp = await httpClient.PostAsync($"{BaseUrl}/api/v2/torrents/start", form, ct);
         if (startResp.StatusCode == HttpStatusCode.NotFound)
         {
-            using var resumeForm = new FormUrlEncodedContent([
-                new KeyValuePair<string, string>("hashes", hash)
-            ]);
-            using var resumeResp = await httpClient.PostAsync($"{BaseUrl}/api/v2/torrents/resume", resumeForm, ct);
-            return resumeResp.IsSuccessStatusCode;
+            using var resumeResp = await SendWithReauthAsync(() => new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/api/v2/torrents/resume")
+            {
+                Content = new FormUrlEncodedContent([new KeyValuePair<string, string>("hashes", hash)])
+            }, ct);
+            return resumeResp is { IsSuccessStatusCode: true };
         }
 
         return startResp.IsSuccessStatusCode;
@@ -210,69 +264,24 @@ public sealed class QBitClient(
             return false;
         }
 
-        var nonMediaIndices = new List<int>();
-        var hasValidMedia = false;
-
-        foreach (var file in files)
+        var audit = _securityAuditor.EvaluateFiles(hash, files);
+        if (!audit.IsSafe)
         {
-            var normalizedName = file.Name.Replace('\\', '/');
-            var ext = Path.GetExtension(normalizedName);
-
-            // Security Check 1: Reject path traversal tokens
-            if (normalizedName.Contains("../", StringComparison.Ordinal) ||
-                normalizedName.StartsWith('/') ||
-                normalizedName.Contains("/../", StringComparison.Ordinal))
+            if (audit.ShouldDeleteTorrent)
             {
-                logger.LogError("CRITICAL SECURITY VIOLATION: Torrent '{Hash}' contains path traversal token in '{Name}'. Aborting and purging from swarm.", hash, file.Name);
                 await DeleteTorrentAsync(hash, deleteFiles: true, ct);
-                return false;
             }
-
-            // Security Check 2: Reject blacklisted dangerous file types
-            if (BlacklistedDangerousExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
-            {
-                logger.LogError("CRITICAL SECURITY VIOLATION: Torrent '{Hash}' contains blacklisted dangerous file '{Name}'. Aborting and purging from swarm.", hash, file.Name);
-                await DeleteTorrentAsync(hash, deleteFiles: true, ct);
-                return false;
-            }
-
-            // Security Check 3: Check if valid media file
-            if (AllowedMediaExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
-            {
-                hasValidMedia = true;
-            }
-            else if (AllowedSubtitleExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
-            {
-                // Subtitles permitted if within reasonable size ceiling (<= 2MB)
-                if (file.Size > 2 * 1024 * 1024)
-                {
-                    logger.LogWarning("Deselecting oversize subtitle file '{Name}' ({Size} bytes) in torrent '{Hash}'.", file.Name, file.Size, hash);
-                    nonMediaIndices.Add(file.Index);
-                }
-            }
-            else
-            {
-                // DEFAULT DENY: Any non-media file type (nfo, txt, url, samples, unknown) is excluded
-                nonMediaIndices.Add(file.Index);
-            }
-        }
-
-        // Security Check 4: Must contain at least one valid video file
-        if (!hasValidMedia)
-        {
-            logger.LogWarning("SECURITY REJECTION: Torrent '{Hash}' contains no recognized video files. Deleting from client.", hash);
-            await DeleteTorrentAsync(hash, deleteFiles: true, ct);
             return false;
         }
 
         // Exclude all non-media files by setting priority to 0 (Do Not Download)
-        if (nonMediaIndices.Count > 0)
+        if (audit.NonMediaIndices.Count > 0)
         {
             logger.LogInformation(
                 "Zero-Trust Policy: Deselecting {Count} non-media files (priority=0) for torrent '{Hash}'.",
-                nonMediaIndices.Count,
+                audit.NonMediaIndices.Count,
                 hash);
-            await SetFilePrioritiesAsync(hash, nonMediaIndices, priority: 0, ct);
+            await SetFilePrioritiesAsync(hash, audit.NonMediaIndices, priority: 0, ct);
         }
 
         // Torrent passed security audit: safe to resume
@@ -283,17 +292,11 @@ public sealed class QBitClient(
 
     public async Task AuditPendingQuarantinedTorrentsAsync(CancellationToken ct)
     {
-        if (!await EnsureAuthenticatedAsync(ct))
-        {
-            return;
-        }
-
         try
         {
             // Inspect torrents currently in paused/stopped state
-            var pausedTorrents = await httpClient.GetFromJsonAsync<List<QBitTorrentItem>>(
+            var pausedTorrents = await GetJsonWithReauthAsync<List<QBitTorrentItem>>(
                 $"{BaseUrl}/api/v2/torrents/info?filter=paused",
-                _jsonOptions,
                 ct) ?? [];
 
             foreach (var torrent in pausedTorrents)
@@ -313,14 +316,8 @@ public sealed class QBitClient(
 
     public async Task<IReadOnlyList<QBitTorrentItem>> GetCompletedTorrentsAsync(CancellationToken ct)
     {
-        if (!await EnsureAuthenticatedAsync(ct))
-        {
-            return [];
-        }
-
-        var items = await httpClient.GetFromJsonAsync<List<QBitTorrentItem>>(
+        var items = await GetJsonWithReauthAsync<List<QBitTorrentItem>>(
             $"{BaseUrl}/api/v2/torrents/info?filter=completed",
-            _jsonOptions,
             ct);
 
         return items ?? [];
@@ -328,17 +325,19 @@ public sealed class QBitClient(
 
     public async Task<bool> DeleteTorrentAsync(string hash, bool deleteFiles, CancellationToken ct)
     {
-        if (!await EnsureAuthenticatedAsync(ct))
+        using var resp = await SendWithReauthAsync(() => new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/api/v2/torrents/delete")
+        {
+            Content = new FormUrlEncodedContent([
+                new KeyValuePair<string, string>("hashes", hash),
+                new KeyValuePair<string, string>("deleteFiles", deleteFiles ? "true" : "false")
+            ])
+        }, ct);
+
+        if (resp is null)
         {
             return false;
         }
 
-        using var form = new FormUrlEncodedContent([
-            new KeyValuePair<string, string>("hashes", hash),
-            new KeyValuePair<string, string>("deleteFiles", deleteFiles ? "true" : "false")
-        ]);
-
-        using var resp = await httpClient.PostAsync($"{BaseUrl}/api/v2/torrents/delete", form, ct);
         if (!resp.IsSuccessStatusCode)
         {
             logger.LogError("Failed to delete torrent '{Hash}' from qBittorrent (HTTP {Status}).", hash, resp.StatusCode);
@@ -350,24 +349,25 @@ public sealed class QBitClient(
 
     public async Task PauseAllAsync(CancellationToken ct)
     {
-        if (!await EnsureAuthenticatedAsync(ct))
+        // qBittorrent v5.0+ uses /api/v2/torrents/stop; v4.x uses /api/v2/torrents/pause
+        using var stopResp = await SendWithReauthAsync(() => new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/api/v2/torrents/stop")
+        {
+            Content = new FormUrlEncodedContent([new KeyValuePair<string, string>("hashes", "all")])
+        }, ct);
+
+        if (stopResp is null)
         {
             return;
         }
 
-        using var stopForm = new FormUrlEncodedContent([
-            new KeyValuePair<string, string>("hashes", "all")
-        ]);
-
-        // qBittorrent v5.0+ uses /api/v2/torrents/stop; v4.x uses /api/v2/torrents/pause
-        using var stopResp = await httpClient.PostAsync($"{BaseUrl}/api/v2/torrents/stop", stopForm, ct);
         if (stopResp.StatusCode == HttpStatusCode.NotFound)
         {
-            using var pauseForm = new FormUrlEncodedContent([
-                new KeyValuePair<string, string>("hashes", "all")
-            ]);
-            using var pauseResp = await httpClient.PostAsync($"{BaseUrl}/api/v2/torrents/pause", pauseForm, ct);
-            if (pauseResp.IsSuccessStatusCode)
+            using var pauseResp = await SendWithReauthAsync(() => new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl}/api/v2/torrents/pause")
+            {
+                Content = new FormUrlEncodedContent([new KeyValuePair<string, string>("hashes", "all")])
+            }, ct);
+
+            if (pauseResp is { IsSuccessStatusCode: true })
             {
                 logger.LogWarning("Paused all active qBittorrent transfers due to VPN disconnection.");
             }

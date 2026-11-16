@@ -48,4 +48,9 @@ public sealed class RsyncConfigOpts
     /// Flag indicating whether local staging files should be deleted after successful remote transfer.
     /// </summary>
     public bool RemoveLocalAfterSync { get; set; }
+
+    /// <summary>
+    /// Optional server-side rrsync root prefix to strip from remote destination directories.
+    /// </summary>
+    public string RrsyncPrefix { get; set; } = "/mnt/export/storage/plex/media";
 }

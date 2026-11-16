@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Sync.Sharp.Models.Options;
 
 public class SchedulingConfigOpts
@@ -7,6 +9,7 @@ public class SchedulingConfigOpts
     /// <summary>
     /// Periodic execution interval in minutes for the background sync daemon loop.
     /// </summary>
+    [Range(0, int.MaxValue)]
     public int IntervalMinutes { get; set; }
 
     /// <summary>
@@ -22,6 +25,7 @@ public class SchedulingConfigOpts
     /// <summary>
     /// Port listened on by <c>SyncSchedulerWorker</c> when running as a hosted service in daemon mode for on-demand sync triggers and health probes.
     /// </summary>
+    [Range(0, 65535)]
     public int WebhookPort { get; set; }
 
     /// <summary>
@@ -32,5 +36,6 @@ public class SchedulingConfigOpts
     /// <summary>
     /// Local file system path to the persistent JSON state database storing acquired release history.
     /// </summary>
+    [Required(AllowEmptyStrings = false)]
     public string StateFilePath { get; set; } = string.Empty;
 }

@@ -6,10 +6,22 @@ using Sync.Sharp.Models.Options;
 
 namespace Sync.Sharp.Services;
 
+public interface IStateStore
+{
+    Task InitializeAsync(CancellationToken ct);
+    bool IsExternalIdProcessed(string externalId);
+    bool IsHashProcessed(string infoHash);
+    bool IsHashSynced(string infoHash);
+    Task RecordGrabbedAsync(string? externalId, string? infoHash, string title, string category, CancellationToken ct);
+    Task RecordGrabbedAsync(string? externalId, string? infoHash, string title, MediaCategory category, CancellationToken ct);
+    Task MarkSyncedAsync(string infoHash, string title, string category, CancellationToken ct);
+    Task MarkSyncedAsync(string infoHash, string title, MediaCategory category, CancellationToken ct);
+}
+
 public sealed class JsonStateStore(
     IOptions<SchedulingConfigOpts> scheduleOptions,
     JsonSerializerOptions jsonOptions,
-    ILogger<JsonStateStore> logger)
+    ILogger<JsonStateStore> logger) : IStateStore
 {
     private readonly SchedulingConfigOpts _scheduleConfig = scheduleOptions?.Value ?? throw new ArgumentNullException(nameof(scheduleOptions));
     private readonly JsonSerializerOptions _jsonOptions = jsonOptions ?? throw new ArgumentNullException(nameof(jsonOptions));
@@ -19,6 +31,8 @@ public sealed class JsonStateStore(
     private readonly SemaphoreSlim _fileLock = new(InitialRequestCount, MaxRequestCount);
     private readonly Lock _stateLock = new();
     private SyncStateDocument _state = new([]);
+    private readonly HashSet<string> _externalIds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> _hashIndex = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task InitializeAsync(CancellationToken ct)
     {
@@ -56,6 +70,7 @@ public sealed class JsonStateStore(
             lock (_stateLock)
             {
                 _state = loaded;
+                RebuildIndicesLocked();
             }
 
             logger.LogDebug(
@@ -71,10 +86,14 @@ public sealed class JsonStateStore(
 
     public bool IsExternalIdProcessed(string externalId)
     {
+        if (string.IsNullOrWhiteSpace(externalId))
+        {
+            return false;
+        }
+
         lock (_stateLock)
         {
-            return _state.Items.Any(i =>
-                string.Equals(i.ExternalId, externalId, StringComparison.OrdinalIgnoreCase));
+            return _externalIds.Contains(externalId);
         }
     }
 
@@ -87,8 +106,7 @@ public sealed class JsonStateStore(
 
         lock (_stateLock)
         {
-            return _state.Items.Any(i =>
-                string.Equals(i.InfoHash, infoHash, StringComparison.OrdinalIgnoreCase));
+            return _hashIndex.ContainsKey(infoHash);
         }
     }
 
@@ -101,9 +119,8 @@ public sealed class JsonStateStore(
 
         lock (_stateLock)
         {
-            return _state.Items.Any(i =>
-                string.Equals(i.InfoHash, infoHash, StringComparison.OrdinalIgnoreCase) &&
-                i.Status == MediaSyncStatus.Synced);
+            return _hashIndex.TryGetValue(infoHash, out var idx) &&
+                   _state.Items[idx].Status == MediaSyncStatus.Synced;
         }
     }
 
@@ -125,32 +142,35 @@ public sealed class JsonStateStore(
         await _fileLock.WaitAsync(ct);
         try
         {
+            SyncStateDocument snapshot;
             lock (_stateLock)
             {
-                if (!string.IsNullOrWhiteSpace(infoHash) &&
-                    _state.Items.Any(i => string.Equals(i.InfoHash, infoHash, StringComparison.OrdinalIgnoreCase)))
+                if (!string.IsNullOrWhiteSpace(infoHash) && _hashIndex.ContainsKey(infoHash))
                 {
                     return;
                 }
 
                 if (string.IsNullOrWhiteSpace(infoHash) &&
                     !string.IsNullOrWhiteSpace(externalId) &&
-                    _state.Items.Any(i => string.Equals(i.ExternalId, externalId, StringComparison.OrdinalIgnoreCase)))
+                    _externalIds.Contains(externalId))
                 {
                     return;
                 }
 
-                _state.Items.Add(new MediaHistoryEntry(
+                var entry = new MediaHistoryEntry(
                     ExternalId: externalId,
                     InfoHash: infoHash?.ToLowerInvariant() ?? string.Empty,
                     Title: title,
                     Category: category,
                     Status: MediaSyncStatus.Grabbed,
                     CreatedAt: DateTimeOffset.UtcNow,
-                    SyncedAt: null));
+                    SyncedAt: null);
+
+                AddEntryLocked(entry);
+                snapshot = new SyncStateDocument([.. _state.Items]);
             }
 
-            await SaveInternalAsync(_state, ct);
+            await SaveInternalAsync(snapshot, ct);
         }
         finally
         {
@@ -175,12 +195,10 @@ public sealed class JsonStateStore(
         try
         {
             var now = DateTimeOffset.UtcNow;
+            SyncStateDocument snapshot;
             lock (_stateLock)
             {
-                var idx = _state.Items.FindIndex(i =>
-                    string.Equals(i.InfoHash, infoHash, StringComparison.OrdinalIgnoreCase));
-
-                if (idx >= 0)
+                if (_hashIndex.TryGetValue(infoHash, out var idx))
                 {
                     var existing = _state.Items[idx];
                     _state.Items[idx] = existing with
@@ -191,7 +209,7 @@ public sealed class JsonStateStore(
                 }
                 else
                 {
-                    _state.Items.Add(new MediaHistoryEntry(
+                    AddEntryLocked(new MediaHistoryEntry(
                         ExternalId: null,
                         InfoHash: infoHash.ToLowerInvariant(),
                         Title: title,
@@ -200,13 +218,46 @@ public sealed class JsonStateStore(
                         CreatedAt: now,
                         SyncedAt: now));
                 }
+
+                snapshot = new SyncStateDocument([.. _state.Items]);
             }
 
-            await SaveInternalAsync(_state, ct);
+            await SaveInternalAsync(snapshot, ct);
         }
         finally
         {
             _fileLock.Release();
+        }
+    }
+
+    private void RebuildIndicesLocked()
+    {
+        _externalIds.Clear();
+        _hashIndex.Clear();
+
+        for (var i = 0; i < _state.Items.Count; i++)
+        {
+            IndexEntryLocked(_state.Items[i], i);
+        }
+    }
+
+    private void AddEntryLocked(MediaHistoryEntry entry)
+    {
+        var idx = _state.Items.Count;
+        _state.Items.Add(entry);
+        IndexEntryLocked(entry, idx);
+    }
+
+    private void IndexEntryLocked(MediaHistoryEntry entry, int index)
+    {
+        if (!string.IsNullOrWhiteSpace(entry.ExternalId))
+        {
+            _externalIds.Add(entry.ExternalId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.InfoHash))
+        {
+            _hashIndex.TryAdd(entry.InfoHash, index);
         }
     }
 

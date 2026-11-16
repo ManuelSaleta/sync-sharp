@@ -15,12 +15,17 @@ public sealed record DiscoveryCandidate(string ExternalId, string SearchQuery, M
     }
 }
 
+public interface ITrendingFeedClient
+{
+    Task<IReadOnlyList<DiscoveryCandidate>> GetUnseenCandidatesAsync(CancellationToken ct);
+}
+
 public sealed class TrendingFeedClient(
     HttpClient httpClient,
     IOptions<TrendingConfigOpts> trendingOptions,
-    JsonStateStore stateStore,
+    IStateStore stateStore,
     JsonSerializerOptions jsonOptions,
-    ILogger<TrendingFeedClient> logger)
+    ILogger<TrendingFeedClient> logger) : ITrendingFeedClient
 {
     private readonly TrendingConfigOpts _config = trendingOptions?.Value ?? throw new ArgumentNullException(nameof(trendingOptions));
     private readonly JsonSerializerOptions _jsonOptions = jsonOptions ?? throw new ArgumentNullException(nameof(jsonOptions));

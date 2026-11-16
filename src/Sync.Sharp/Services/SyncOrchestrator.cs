@@ -12,12 +12,12 @@ public sealed class SyncOrchestrator(
     IOptions<FiltersConfigOpts> filtersOptions,
     IOptions<DownloaderConfigOpts> downloaderOptions,
     IOptions<RsyncConfigOpts> rsyncOptions,
-    VpnGuardService vpnGuard,
-    JsonStateStore stateStore,
-    TrendingFeedClient trendingClient,
-    ProwlarrClient prowlarrClient,
-    QBitClient qBitClient,
-    MediaTransferService rsyncService,
+    IVpnGuardService vpnGuard,
+    IStateStore stateStore,
+    ITrendingFeedClient trendingClient,
+    IProwlarrClient prowlarrClient,
+    IQBitClient qBitClient,
+    IMediaTransferService rsyncService,
     IMediaPollingService plexPollingService,
     ILogger<SyncOrchestrator> logger)
 {
@@ -39,18 +39,31 @@ public sealed class SyncOrchestrator(
 
         await stateStore.InitializeAsync(ct);
 
-        // Step 1: Verify VPN tunnel before any indexer or swarm activity
-        var vpnConnected = await vpnGuard.IsVpnConnectedAsync(ct);
-        if (!vpnConnected)
+        if (!await VerifyVpnOrPauseAsync(ct))
         {
-            if (_vpnConfig.PauseTorrentsWhenDisconnected)
-            {
-                await qBitClient.PauseAllAsync(ct);
-            }
             return;
         }
 
-        // Step 2: Query trending candidates and search Prowlarr
+        await DiscoverAndGrabCandidatesAsync(ct);
+
+        await qBitClient.AuditPendingQuarantinedTorrentsAsync(ct);
+
+        await SweepCompletedTorrentsAsync(ct);
+    }
+
+    private async Task<bool> VerifyVpnOrPauseAsync(CancellationToken ct)
+    {
+        var vpnConnected = await vpnGuard.IsVpnConnectedAsync(ct);
+        if (!vpnConnected && _vpnConfig.PauseTorrentsWhenDisconnected)
+        {
+            await qBitClient.PauseAllAsync(ct);
+        }
+
+        return vpnConnected;
+    }
+
+    private async Task DiscoverAndGrabCandidatesAsync(CancellationToken ct)
+    {
         var candidates = await trendingClient.GetUnseenCandidatesAsync(ct);
         var grabbedCount = 0;
 
@@ -61,111 +74,116 @@ public sealed class SyncOrchestrator(
                 break;
             }
 
-            // Early check: Skip if candidate title already exists in Plex library
-            var c = new MediaCandidate
+            if (await TryGrabCandidateAsync(candidate, ct))
             {
-                Id = candidate.ExternalId,
-                Title = candidate.SearchQuery,
-                SearchQuery = candidate.SearchQuery,
-                Category = candidate.Category,
-            };
-
-            if (await IsMediaAlreadyPresent(c, ct))
-            {
-                continue;
-            }
-
-            var filter = candidate.Category.IsTv()
-                ? _filtersConfig.Tv
-                : _filtersConfig.Movies;
-
-            var bestRelease = await prowlarrClient.SearchBestReleaseAsync(candidate.SearchQuery, filter, ct);
-            if (bestRelease is null)
-            {
-                continue;
-            }
-
-            var infoHash = !string.IsNullOrWhiteSpace(bestRelease.InfoHash)
-                ? bestRelease.InfoHash
-                : bestRelease.Guid;
-
-            if (stateStore.IsHashProcessed(infoHash))
-            {
-                continue;
-            }
-
-            c.Title = bestRelease.Title;
-            c.InfoHash = infoHash;
-            // Target release check: Verify matched release does not already exist in Plex before quarantining
-            if (await IsMediaAlreadyPresent(c, ct))
-            {
-                continue;
-            }
-
-            var downloadUri = bestRelease.GetBestDownloadUri();
-            if (string.IsNullOrWhiteSpace(downloadUri))
-            {
-                continue;
-            }
-
-            if (await qBitClient.AddTorrentQuarantinedAsync(downloadUri, candidate.Category, ct))
-            {
-                await stateStore.RecordGrabbedAsync(
-                    candidate.ExternalId,
-                    infoHash,
-                    bestRelease.Title,
-                    candidate.Category,
-                    ct);
                 grabbedCount++;
-
-                // Attempt immediate pre-download security audit if metadata is already populated
-                await qBitClient.AuditAndQuarantineTorrentAsync(infoHash, ct);
             }
         }
+    }
 
-        // Step 2.5: Audit all in-flight quarantined torrents whose metadata resolved
-        await qBitClient.AuditPendingQuarantinedTorrentsAsync(ct);
+    private async Task<bool> TryGrabCandidateAsync(DiscoveryCandidate candidate, CancellationToken ct)
+    {
+        var mediaCandidate = new MediaCandidate
+        {
+            Id = candidate.ExternalId,
+            Title = candidate.SearchQuery,
+            SearchQuery = candidate.SearchQuery,
+            Category = candidate.Category
+        };
 
-        // Step 3: Sweep completed torrents, rsync verified media to micro-nas, and manage cleanup
+        if (await IsMediaAlreadyPresent(mediaCandidate, ct))
+        {
+            return false;
+        }
+
+        var filter = candidate.Category.IsTv()
+            ? _filtersConfig.Tv
+            : _filtersConfig.Movies;
+
+        var bestRelease = await prowlarrClient.SearchBestReleaseAsync(candidate.SearchQuery, filter, ct);
+        if (bestRelease is null)
+        {
+            return false;
+        }
+
+        var infoHash = !string.IsNullOrWhiteSpace(bestRelease.InfoHash)
+            ? bestRelease.InfoHash
+            : bestRelease.Guid;
+
+        if (stateStore.IsHashProcessed(infoHash))
+        {
+            return false;
+        }
+
+        mediaCandidate.Title = bestRelease.Title;
+        mediaCandidate.InfoHash = infoHash;
+
+        if (await IsMediaAlreadyPresent(mediaCandidate, ct))
+        {
+            return false;
+        }
+
+        var downloadUri = bestRelease.GetBestDownloadUri();
+        if (string.IsNullOrWhiteSpace(downloadUri))
+        {
+            return false;
+        }
+
+        if (!await qBitClient.AddTorrentQuarantinedAsync(downloadUri, candidate.Category, ct))
+        {
+            return false;
+        }
+
+        await stateStore.RecordGrabbedAsync(
+            candidate.ExternalId,
+            infoHash,
+            bestRelease.Title,
+            candidate.Category,
+            ct);
+
+        await qBitClient.AuditAndQuarantineTorrentAsync(infoHash, ct);
+        return true;
+    }
+
+    private async Task SweepCompletedTorrentsAsync(CancellationToken ct)
+    {
         var completed = await qBitClient.GetCompletedTorrentsAsync(ct);
         foreach (var torrent in completed)
         {
             var isSynced = stateStore.IsHashSynced(torrent.Hash);
             var category = torrent.MediaCategory;
 
-            if (!isSynced)
+            if (!isSynced && await rsyncService.TransferAsync(torrent, ct))
             {
-                if (await rsyncService.TransferAsync(torrent, ct))
-                {
-                    await stateStore.MarkSyncedAsync(torrent.Hash, torrent.Name, category, ct);
-                    isSynced = true;
+                await stateStore.MarkSyncedAsync(torrent.Hash, torrent.Name, category, ct);
+                isSynced = true;
 
-                    // Trigger Plex library scan for the updated category
-                    _ = plexPollingService.ForceScanLibraryAsync(category, ct);
-                }
+                _ = plexPollingService.ForceScanLibraryAsync(category, ct);
             }
 
-            if (!isSynced)
+            if (isSynced)
             {
-                continue;
+                await EvaluateAndCleanupSyncedTorrentAsync(torrent, ct);
             }
+        }
+    }
 
-            // Evaluate cleanup criteria for synced torrents
-            var seedingTimeMinutes = torrent.SeedingTimeSeconds / 60.0;
-            var ratioSatisfied = _downloaderConfig.RatioLimit > 0 && torrent.Ratio >= _downloaderConfig.RatioLimit;
-            var seedingTimeSatisfied = _downloaderConfig.SeedingTimeLimitMinutes > 0 && seedingTimeMinutes >= _downloaderConfig.SeedingTimeLimitMinutes;
-            var shouldCleanup = _rsyncConfig.RemoveLocalAfterSync || ratioSatisfied || seedingTimeSatisfied;
+    private async Task EvaluateAndCleanupSyncedTorrentAsync(QBitTorrentItem torrent, CancellationToken ct)
+    {
+        var seedingTimeMinutes = torrent.SeedingTimeSeconds / 60.0;
+        var ratioSatisfied = _downloaderConfig.RatioLimit > 0 && torrent.Ratio >= _downloaderConfig.RatioLimit;
+        var seedingTimeSatisfied = _downloaderConfig.SeedingTimeLimitMinutes > 0 && seedingTimeMinutes >= _downloaderConfig.SeedingTimeLimitMinutes;
+        var shouldCleanup = _rsyncConfig.RemoveLocalAfterSync || ratioSatisfied || seedingTimeSatisfied;
 
-            if (shouldCleanup)
-            {
-                await qBitClient.DeleteTorrentAsync(torrent.Hash, deleteFiles: true, ct);
-                await rsyncService.CleanupLocalStagingAsync(torrent, ct);
-                logger.LogInformation(
-                    "Cleaned up synced torrent '{Name}' and local staging files (ratio: {Ratio:F2}, seeded: {Minutes:F0}m).",
-                    torrent.Name,
-                    torrent.Ratio,
-                    seedingTimeMinutes);
-            }
+        if (shouldCleanup)
+        {
+            await qBitClient.DeleteTorrentAsync(torrent.Hash, deleteFiles: true, ct);
+            await rsyncService.CleanupLocalStagingAsync(torrent, ct);
+            logger.LogInformation(
+                "Cleaned up synced torrent '{Name}' and local staging files (ratio: {Ratio:F2}, seeded: {Minutes:F0}m).",
+                torrent.Name,
+                torrent.Ratio,
+                seedingTimeMinutes);
         }
     }
 
