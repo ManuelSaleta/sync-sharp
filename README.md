@@ -21,6 +21,71 @@ Published under **ChaoticDreams** on NuGet and built atop [`Plex.Core.Http`](htt
 
 ---
 
+## Architecture
+
+In the wider homelab ecosystem, `Sync.Sharp` operates as the zero-trust execution engine alongside `jarvis-sharp` (ChatOps gateway), Radarr/Sonarr (catalog authority), and NAS/Plex storage:
+
+```mermaid
+flowchart TD
+    subgraph UserInterfaces["User Request & Approval Layer"]
+        User["Homelab User / Admin"]
+        Slack["Slack (#homelab-ops / Direct Message)"]
+        Overseerr["Overseerr / Jellyseerr / Plex Watchlist"]
+    end
+
+    subgraph ChatOpsGateway["ChatOps Gateway (jarvis-sharp)"]
+        JarvisSlack["SlackNet Socket Mode Gateway"]
+        JarvisStore["CandidateStateStore (24h TTL)"]
+        JarvisPlex["PlexService (Pre-Acquisition Deduplication)"]
+        JarvisSigner["HmacSigner (HMAC-SHA256 Webhook Dispatcher)"]
+    end
+
+    subgraph CatalogAuthority["Metadata & Catalog Authority"]
+        Radarr["Radarr API v3 (Movies: /api/v3/movie?monitored=true)"]
+        Sonarr["Sonarr API v3 (TV Shows: /api/v3/series)"]
+    end
+
+    subgraph ZeroTrustEngine["Zero-Trust Execution Engine (Sync.Sharp)"]
+        VpnGuard["VpnGuardService (WireGuard/NordLynx Killswitch)"]
+        Discovery["IMediaDiscoveryProvider\n(Radarr / Jarvis Webhook / Trending)"]
+        Prowlarr["ProwlarrClient & ReleaseScorer"]
+        QBit["QBitClient (Paused Quarantine)"]
+        Auditor["TorrentSecurityAuditor (Strip .exe & Traversal)"]
+        Validator["MediaValidator (ffprobe Video/Audio Stream Audit)"]
+        Transfer["RsyncTransferClient (Restricted rrsync -wo over SSH)"]
+        Cleaner["StagingCleaner (Safe Boundary Post-Transfer Prune)"]
+    end
+
+    subgraph StorageLayer["Storage & Playback Layer"]
+        NAS["TrueNAS / Remote NAS (ZFS Media Dataset)"]
+        Plex["Plex Media Server (FreeSalty)"]
+    end
+
+    %% User Request Flow
+    User -->|"Request Title"| Overseerr
+    Overseerr -->|"Add & Monitor"| Radarr
+    User -->|"/download 1 3 6" or Button Click| Slack
+    Slack --> JarvisSlack
+
+    %% Jarvis Approval Flow
+    JarvisSlack --> JarvisPlex
+    JarvisPlex <-->|"Deduplicate against Library"| Plex
+    JarvisSlack --> JarvisSigner
+    JarvisSigner -->|"POST /api/v1/sync/trigger (HMAC-SHA256)"| Discovery
+
+    %% Radarr Wanted Flow
+    Radarr -->|"GET /api/v3/movie?monitored=true"| Discovery
+
+    %% Sync.Sharp Execution Pipeline
+    Discovery --> VpnGuard --> Prowlarr --> QBit --> Auditor --> Validator --> Transfer --> Cleaner
+    Transfer -->|"rrsync -wo"| NAS
+    Cleaner -->|"POST /api/v3/command (DownloadedMoviesScan)"| Radarr
+    Cleaner -->|"Notify Completed"| JarvisSlack
+    NAS -.->|"Local Mount / SMB"| Plex
+```
+
+---
+
 ## Installation
 
 Install the package via NuGet CLI:
