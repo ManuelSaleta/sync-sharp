@@ -104,6 +104,11 @@ public static class ServiceCollectionExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        services.AddOptions<DiscoveryConfigOpts>()
+            .Bind(configuration.GetSection(DiscoveryConfigOpts.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
         services.AddOptions<IndexerConfigOpts>()
             .Bind(configuration.GetSection(IndexerConfigOpts.SectionName))
             .ValidateDataAnnotations()
@@ -179,15 +184,42 @@ public static class ServiceCollectionExtensions
             options.Version = "1.0.0";
         });
 
-        services.AddHttpClient<TrendingFeedClient>(client =>
+        // services.AddHttpClient<TrendingFeedClient>(client =>
+        // {
+        //     client.Timeout = TimeSpan.FromSeconds(20);
+        //     client.DefaultRequestHeaders.UserAgent.ParseAdd("Sync.Sharp/1.0");
+        // }).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+        // {
+        //     AutomaticDecompression = DecompressionMethods.All
+        // });
+
+        services.AddHttpClient<RadarrClient>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(20);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("Sync.Sharp/1.0");
-        }).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
-        {
-            AutomaticDecompression = DecompressionMethods.All
         });
-        services.AddTransient<ITrendingFeedClient>(sp => sp.GetRequiredService<TrendingFeedClient>());
+        services.AddTransient<IRadarrClient>(sp => sp.GetRequiredService<RadarrClient>());
+
+        services.AddHttpClient<SonarrClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(20);
+        });
+        services.AddTransient<ISonarrClient>(sp => sp.GetRequiredService<SonarrClient>());
+
+        services.AddTransient<RadarrDiscoveryProvider>();
+        services.AddTransient<SonarrDiscoveryProvider>();
+        services.AddSingleton<JarvisWebhookDiscoveryProvider>();
+        services.AddSingleton<IJarvisWebhookQueue>(sp => sp.GetRequiredService<JarvisWebhookDiscoveryProvider>());
+
+        services.AddTransient<IMediaDiscoveryProvider>(sp =>
+        {
+            var opts = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<DiscoveryConfigOpts>>().Value;
+            return opts.Provider.Trim().ToLowerInvariant() switch
+            {
+                "sonarr" => sp.GetRequiredService<SonarrDiscoveryProvider>(),
+                "jarvis" => sp.GetRequiredService<JarvisWebhookDiscoveryProvider>(),
+                _ => sp.GetRequiredService<RadarrDiscoveryProvider>()
+            };
+        });
 
         services.AddHttpClient<ProwlarrClient>(client =>
         {

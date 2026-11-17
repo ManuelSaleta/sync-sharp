@@ -7,24 +7,19 @@ using Sync.Sharp.Models.Options;
 
 namespace Sync.Sharp.Services;
 
-public sealed record DiscoveryCandidate(string ExternalId, string SearchQuery, MediaCategory Category);
-
-public interface ITrendingFeedClient
-{
-    Task<IReadOnlyList<DiscoveryCandidate>> GetUnseenCandidatesAsync(CancellationToken ct);
-}
-
 public sealed class TrendingFeedClient(
     HttpClient httpClient,
     IOptions<TrendingConfigOpts> trendingOptions,
     IStateStore stateStore,
     JsonSerializerOptions jsonOptions,
-    ILogger<TrendingFeedClient> logger) : ITrendingFeedClient
+    ILogger<TrendingFeedClient> logger) : IMediaDiscoveryProvider
 {
     private readonly TrendingConfigOpts _config = trendingOptions?.Value ?? throw new ArgumentNullException(nameof(trendingOptions));
     private readonly JsonSerializerOptions _jsonOptions = jsonOptions ?? throw new ArgumentNullException(nameof(jsonOptions));
 
-    public async Task<IReadOnlyList<DiscoveryCandidate>> GetUnseenCandidatesAsync(CancellationToken ct)
+    public string ProviderName => "Trending";
+
+    public async Task<IReadOnlyList<DiscoveryCandidate>> GetWantedCandidatesAsync(CancellationToken ct)
     {
         var results = new List<DiscoveryCandidate>();
 

@@ -45,7 +45,10 @@ public class ServiceCollectionExtensionsTests
         provider.GetService<IVpnGuardService>().Should().NotBeNull();
         provider.GetService<JsonStateStore>().Should().NotBeNull();
         provider.GetService<IStateStore>().Should().NotBeNull();
-        provider.GetService<ITrendingFeedClient>().Should().NotBeNull();
+        provider.GetService<IMediaDiscoveryProvider>().Should().BeOfType<RadarrDiscoveryProvider>();
+        provider.GetService<IRadarrClient>().Should().NotBeNull();
+        provider.GetService<ISonarrClient>().Should().NotBeNull();
+        provider.GetService<IJarvisWebhookQueue>().Should().NotBeNull();
         provider.GetService<ProwlarrClient>().Should().NotBeNull();
         provider.GetService<IProwlarrClient>().Should().NotBeNull();
         provider.GetService<IReleaseScorer>().Should().NotBeNull();

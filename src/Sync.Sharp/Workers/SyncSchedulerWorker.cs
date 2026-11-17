@@ -1,5 +1,7 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -13,9 +15,14 @@ namespace Sync.Sharp.Workers;
 public sealed class SyncSchedulerWorker(
     IOptions<SchedulingConfigOpts> scheduleOptions,
     IServiceScopeFactory scopeFactory,
-    ILogger<SyncSchedulerWorker> logger) : BackgroundService
+    ILogger<SyncSchedulerWorker> logger,
+    IOptions<DiscoveryConfigOpts>? discoveryOptions = null,
+    IJarvisWebhookQueue? jarvisQueue = null,
+    JsonSerializerOptions? jsonOptions = null) : BackgroundService
 {
     private readonly SchedulingConfigOpts _config = scheduleOptions?.Value ?? throw new ArgumentNullException(nameof(scheduleOptions));
+    private readonly DiscoveryConfigOpts _discoveryConfig = discoveryOptions?.Value ?? new DiscoveryConfigOpts();
+    private readonly JsonSerializerOptions _jsonOptions = jsonOptions ?? new JsonSerializerOptions(JsonSerializerDefaults.Web);
 
     private readonly Channel<string> _triggerChannel = Channel.CreateBounded<string>(new BoundedChannelOptions(1)
     {
@@ -25,16 +32,17 @@ public sealed class SyncSchedulerWorker(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var interval = TimeSpan.FromMinutes(Math.Max(1, _config.IntervalMinutes));
+        var webhookPort = _config.WebhookPort > 0 ? _config.WebhookPort : _discoveryConfig.Jarvis.WebhookPort;
 
         logger.LogInformation(
             "Starting sync-sharp daemon loop (interval: {Minutes} minutes, webhook port: {WebhookPort}).",
             interval.TotalMinutes,
-            _config.WebhookPort);
+            webhookPort);
 
         // Start webhook listener if configured
-        if (_config.WebhookPort > 0)
+        if (webhookPort > 0)
         {
-            _ = RunWebhookListenerAsync(_config.WebhookPort, stoppingToken);
+            _ = RunWebhookListenerAsync(webhookPort, stoppingToken);
         }
 
         // Initial cycle run on startup
@@ -166,28 +174,50 @@ public sealed class SyncSchedulerWorker(
                 return;
             }
 
-            // Authentication verification if WebhookSecretToken is configured
-            var secretToken = !string.IsNullOrWhiteSpace(_config.WebhookSecretToken)
-                ? _config.WebhookSecretToken
-                : Environment.GetEnvironmentVariable("WEBHOOK_SECRET_TOKEN");
+            // Read raw body bytes for HMAC-SHA256 verification and optional Jarvis payload parsing
+            byte[] bodyBytes;
+            using (var ms = new MemoryStream())
+            {
+                await req.InputStream.CopyToAsync(ms, ct);
+                bodyBytes = ms.ToArray();
+            }
+
+            // Authentication verification if WebhookSecretToken or Discovery:Jarvis:WebhookSecret is configured
+            var secretToken = !string.IsNullOrWhiteSpace(_discoveryConfig.Jarvis.WebhookSecret)
+                ? _discoveryConfig.Jarvis.WebhookSecret
+                : (!string.IsNullOrWhiteSpace(_config.WebhookSecretToken)
+                    ? _config.WebhookSecretToken
+                    : Environment.GetEnvironmentVariable("WEBHOOK_SECRET_TOKEN"));
 
             if (!string.IsNullOrWhiteSpace(secretToken))
             {
-                var receivedToken = req.Headers["X-Webhook-Token"];
-                if (string.IsNullOrWhiteSpace(receivedToken) && !string.IsNullOrWhiteSpace(req.Headers["Authorization"]))
+                var signatureHeader = req.Headers["X-Signature-SHA256"];
+                var isAuthorized = !string.IsNullOrWhiteSpace(signatureHeader) &&
+                                   HmacSignatureValidator.VerifySignature(secretToken, bodyBytes, signatureHeader);
+
+                if (!isAuthorized)
                 {
-                    var authHeader = req.Headers["Authorization"]!;
-                    if (authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                    var receivedToken = req.Headers["X-Webhook-Token"] ?? req.Headers["X-Webhook-Secret"];
+                    if (string.IsNullOrWhiteSpace(receivedToken) && !string.IsNullOrWhiteSpace(req.Headers["Authorization"]))
                     {
-                        receivedToken = authHeader[7..].Trim();
+                        var authHeader = req.Headers["Authorization"]!;
+                        if (authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                        {
+                            receivedToken = authHeader[7..].Trim();
+                        }
                     }
+
+                    isAuthorized = !string.IsNullOrWhiteSpace(receivedToken) &&
+                                   CryptographicOperations.FixedTimeEquals(
+                                       Encoding.UTF8.GetBytes(secretToken),
+                                       Encoding.UTF8.GetBytes(receivedToken));
                 }
 
-                if (!string.Equals(secretToken, receivedToken, StringComparison.Ordinal))
+                if (!isAuthorized)
                 {
                     logger.LogWarning("Unauthorized webhook invocation attempt from {RemoteEndPoint}.", req.RemoteEndPoint);
                     statusCode = (int)HttpStatusCode.Unauthorized;
-                    responseBytes = Encoding.UTF8.GetBytes("{\"error\":\"Unauthorized: invalid or missing webhook secret token\"}\n");
+                    responseBytes = Encoding.UTF8.GetBytes("{\"error\":\"Unauthorized: invalid or missing webhook secret token or signature\"}\n");
                     context.Response.StatusCode = statusCode;
                     context.Response.ContentType = "application/json";
                     context.Response.ContentLength64 = responseBytes.Length;
@@ -197,11 +227,29 @@ public sealed class SyncSchedulerWorker(
                 }
             }
 
-            if (path.StartsWith("/webhook", StringComparison.OrdinalIgnoreCase) ||
+            if (path.Equals("/api/v1/sync/trigger", StringComparison.OrdinalIgnoreCase) ||
+                path.StartsWith("/webhook", StringComparison.OrdinalIgnoreCase) ||
                 path.StartsWith("/sync", StringComparison.OrdinalIgnoreCase))
             {
+                var enqueued = 0;
+                if (bodyBytes.Length > 0 && jarvisQueue is not null)
+                {
+                    try
+                    {
+                        var payload = JsonSerializer.Deserialize<JarvisTriggerPayload>(bodyBytes, _jsonOptions);
+                        if (payload is not null)
+                        {
+                            enqueued = jarvisQueue.EnqueueBatch(payload);
+                        }
+                    }
+                    catch (JsonException ex)
+                    {
+                        logger.LogDebug(ex, "Webhook body on '{Path}' was not a JarvisTriggerPayload; triggering standard cycle.", path);
+                    }
+                }
+
                 _triggerChannel.Writer.TryWrite($"HTTP POST {path}");
-                responseBytes = Encoding.UTF8.GetBytes("{\"status\":\"ok\",\"triggered\":true}\n");
+                responseBytes = Encoding.UTF8.GetBytes($"{{\"status\":\"ok\",\"triggered\":true,\"enqueued\":{enqueued}}}\n");
             }
             else
             {
