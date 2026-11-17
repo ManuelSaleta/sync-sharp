@@ -14,12 +14,15 @@ public sealed class SyncOrchestrator(
     IOptions<RsyncConfigOpts> rsyncOptions,
     IVpnGuardService vpnGuard,
     IStateStore stateStore,
-    ITrendingFeedClient trendingClient,
+    IMediaDiscoveryProvider discoveryProvider,
     IProwlarrClient prowlarrClient,
     IQBitClient qBitClient,
     IMediaTransferService rsyncService,
     IMediaPollingService plexPollingService,
-    ILogger<SyncOrchestrator> logger)
+    ILogger<SyncOrchestrator> logger,
+    IRadarrClient? radarrClient = null,
+    ISonarrClient? sonarrClient = null,
+    IOptions<DiscoveryConfigOpts>? discoveryOptions = null)
 {
     private readonly StorageConfigOpts _storageConfig = storageOptions?.Value ?? throw new ArgumentNullException(nameof(storageOptions));
     private readonly VpnConfigOpts _vpnConfig = vpnOptions?.Value ?? throw new ArgumentNullException(nameof(vpnOptions));
@@ -27,6 +30,7 @@ public sealed class SyncOrchestrator(
     private readonly FiltersConfigOpts _filtersConfig = filtersOptions?.Value ?? throw new ArgumentNullException(nameof(filtersOptions));
     private readonly DownloaderConfigOpts _downloaderConfig = downloaderOptions?.Value ?? throw new ArgumentNullException(nameof(downloaderOptions));
     private readonly RsyncConfigOpts _rsyncConfig = rsyncOptions?.Value ?? throw new ArgumentNullException(nameof(rsyncOptions));
+    private readonly DiscoveryConfigOpts _discoveryConfig = discoveryOptions?.Value ?? new DiscoveryConfigOpts();
 
     public async Task RunCycleAsync(CancellationToken ct)
     {
@@ -64,7 +68,7 @@ public sealed class SyncOrchestrator(
 
     private async Task DiscoverAndGrabCandidatesAsync(CancellationToken ct)
     {
-        var candidates = await trendingClient.GetUnseenCandidatesAsync(ct);
+        var candidates = await discoveryProvider.GetWantedCandidatesAsync(ct);
         var grabbedCount = 0;
 
         foreach (var candidate in candidates)
@@ -171,6 +175,7 @@ public sealed class SyncOrchestrator(
                 isSynced = true;
 
                 await TriggerPlexScanAsync(category, ct);
+                await TriggerArrImportScanAsync(torrent, category, ct);
             }
 
             if (isSynced)
@@ -217,6 +222,31 @@ public sealed class SyncOrchestrator(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Failed to trigger Plex library scan for category {Category}.", category);
+        }
+    }
+
+    private async Task TriggerArrImportScanAsync(QBitTorrentItem torrent, MediaCategory category, CancellationToken ct)
+    {
+        try
+        {
+            if (category.IsMovies() && radarrClient is { IsConfigured: true } && _discoveryConfig.Radarr.SyncOnImport)
+            {
+                var scanPath = !string.IsNullOrWhiteSpace(_rsyncConfig.DestMoviesDir) && !string.IsNullOrWhiteSpace(torrent.Name)
+                    ? Path.Combine(_rsyncConfig.DestMoviesDir, torrent.Name)
+                    : null;
+                await radarrClient.TriggerDownloadedMoviesScanAsync(scanPath, ct);
+            }
+            else if (category.IsTv() && sonarrClient is { IsConfigured: true } && _discoveryConfig.Sonarr.SyncOnImport)
+            {
+                var scanPath = !string.IsNullOrWhiteSpace(_rsyncConfig.DestTvDir) && !string.IsNullOrWhiteSpace(torrent.Name)
+                    ? Path.Combine(_rsyncConfig.DestTvDir, torrent.Name)
+                    : null;
+                await sonarrClient.TriggerDownloadedEpisodesScanAsync(scanPath, ct);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to trigger post-transfer *Arr import scan for '{Name}'.", torrent.Name);
         }
     }
 
