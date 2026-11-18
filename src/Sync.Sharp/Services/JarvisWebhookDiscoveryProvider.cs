@@ -11,6 +11,7 @@ public sealed record JarvisCandidateItem(
     string Title,
     int? Year = null,
     string? Category = null,
+    [property: JsonPropertyName("media_type")] string? MediaType = null,
     [property: JsonPropertyName("imdbId")] string? ImdbId = null
 );
 
@@ -76,7 +77,8 @@ public sealed class JarvisWebhookDiscoveryProvider(
                 continue;
             }
 
-            var category = MediaCategoryParser.FromStringOrDefault(item.Category);
+            var rawCategory = !string.IsNullOrWhiteSpace(item.Category) ? item.Category : item.MediaType;
+            var category = MediaCategoryParser.FromStringOrDefault(rawCategory);
             var externalId = !string.IsNullOrWhiteSpace(item.ImdbId)
                 ? $"jarvis:imdb:{item.ImdbId.Trim()}"
                 : $"jarvis:{category.ToNormalizedString()}:{item.Title.Trim().ToLowerInvariant()}";

@@ -204,7 +204,7 @@ public class DiscoveryProvidersTests
     public async Task JarvisWebhookDiscoveryProvider_AndHmacValidator_VerifyAndEnqueueBatch()
     {
         const string secret = "super-secret-32-byte-hmac-key-123";
-        var json = """{"batch_id":"b1","requested_by":"U123","items":[{"Title":"Severance","Year":2022,"Category":"tv","imdbId":"tt11280740"}]}""";
+        var json = """{"batch_id":"b1","requested_by":"U123","items":[{"Title":"Severance","Year":2022,"Category":"tv","imdbId":"tt11280740"},{"index":1,"title":"Inception","year":2010,"media_type":"Movie"}]}""";
         var bodyBytes = Encoding.UTF8.GetBytes(json);
 
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
@@ -228,13 +228,15 @@ public class DiscoveryProvidersTests
             var payload = JsonSerializer.Deserialize<JarvisTriggerPayload>(bodyBytes, jsonOpts)!;
 
             var enqueued = provider.EnqueueBatch(payload);
-            enqueued.Should().Be(1);
+            enqueued.Should().Be(2);
 
             var candidates = await provider.GetWantedCandidatesAsync(CancellationToken.None);
-            candidates.Should().ContainSingle();
+            candidates.Should().HaveCount(2);
             candidates[0].ExternalId.Should().Be("jarvis:imdb:tt11280740");
             candidates[0].SearchQuery.Should().Be("Severance 2022");
             candidates[0].Category.Should().Be(MediaCategory.Tv);
+            candidates[1].SearchQuery.Should().Be("Inception 2010");
+            candidates[1].Category.Should().Be(MediaCategory.Movies);
 
             // Queue is drained after read
             var secondRead = await provider.GetWantedCandidatesAsync(CancellationToken.None);
